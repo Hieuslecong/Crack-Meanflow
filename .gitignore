@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Envs
+.env
+.venv/
+venv/
+conda/
+*.log
+
+# Large training artifacts
+checkpoints/
+checkpoints_*/
+checkpoints_teacher/
+checkpoints_supervised/
+outputs/
+outputs_*/
+logs/
+runs/
+wandb/
+
+# Dataset / generated data
+data/
+splits/omnicrack30k/
+*.tar.gz
+*.zip
+
+# Keep reports, but ignore huge prediction folders if any
+reports/**/*.png
+reports/**/*.jpg
+reports/**/*.jpeg
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
