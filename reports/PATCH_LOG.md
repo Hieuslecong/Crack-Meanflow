@@ -47,3 +47,11 @@
 - exact fix: set `seg_loss_weight=0.0` and `epochs=3`; keep endpoint BCE+Dice+Tversky, thin loss, full validation, strict one-step flow output.
 - retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python /home/hieulc/avitech11/crackmeanflow/scripts/train_crackmeanflow.py --config /home/hieulc/avitech11/crackmeanflow/configs/mf00_endpoint_only_calibration.yaml`
 - retest result: `PASS`; full-val F1 `0.306205`, th `-0.8`, pred/GT `0.760147`, sampled_abs `1.0`, seg_abs `6.559882`, reload reproducible F1 `0.306177`.
+
+## 2026-05-24 MF04 low-SI config prep
+- error: MF04 needs SI enabled but previous MF01 SI-heavy run diverged; loss had no explicit SI weight knob.
+- root cause: `CrackSILoss` always added full SI loss whenever mode was not endpoint-only/seg-only.
+- files changed: `crackmeanflow/loss.py`, `crackmeanflow/train.py`, `configs/mf04_bce_dice_tversky_02_08.yaml`.
+- exact fix: added `si_loss_weight`, set MF04 to low SI `0.05`, endpoint BCE+Dice+Tversky(0.2,0.8), endpoint weight `2.0`, thin `0.5`, seg `0.0`, full-val gate only.
+- retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python /home/hieulc/avitech11/crackmeanflow/scripts/train_crackmeanflow.py --config /home/hieulc/avitech11/crackmeanflow/configs/mf04_bce_dice_tversky_02_08.yaml`
+- retest result: `PASS`; full-val F1 `0.219894`, th `-0.8`, pred/GT `0.721874`, sampled_abs `1.0`, seg_abs `4.800064`, reload reproducible F1 `0.219894`.

@@ -186,6 +186,7 @@ def train(cfg):
         endpoint_mode=cfg["loss"].get("endpoint_mode", "l1"),
         tversky_alpha=cfg["loss"].get("tversky_alpha", 0.3),
         tversky_beta=cfg["loss"].get("tversky_beta", 0.7),
+        si_loss_weight=cfg["loss"].get("si_loss_weight", 1.0),
     )
 
     # --- resume ---

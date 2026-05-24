@@ -36,7 +36,7 @@ def _unwrap(model):
 
 class CrackSILoss(nn.Module):
     def __init__(self, si_loss_kwargs=None, seg_loss_weight=1.0, endpoint_loss_weight=0.5, thin_loss_weight=0.0,
-                 mode="hybrid", endpoint_mode="l1", tversky_alpha=0.3, tversky_beta=0.7):
+                 mode="hybrid", endpoint_mode="l1", tversky_alpha=0.3, tversky_beta=0.7, si_loss_weight=1.0):
         super().__init__()
         kwargs = dict(si_loss_kwargs or {})
         kwargs.setdefault("label_dropout_prob", 0.0)
@@ -51,6 +51,7 @@ class CrackSILoss(nn.Module):
         self.endpoint_mode = str(endpoint_mode)
         self.tversky_alpha = float(tversky_alpha)
         self.tversky_beta = float(tversky_beta)
+        self.si_loss_weight = float(si_loss_weight)
 
     def _check_finite(self, name, tensor, context):
         if not torch.isfinite(tensor).all():
@@ -138,7 +139,7 @@ class CrackSILoss(nn.Module):
         thin_loss = x0.new_tensor(0.0)
         if self.thin_loss_weight > 0.0:
             thin_loss = self._thin_endpoint_loss(x0_pred, mask_gt)
-        total_loss = si_loss + self.seg_loss_weight * seg_loss + self.endpoint_loss_weight * endpoint_loss + self.thin_loss_weight * thin_loss
+        total_loss = self.si_loss_weight * si_loss + self.seg_loss_weight * seg_loss + self.endpoint_loss_weight * endpoint_loss + self.thin_loss_weight * thin_loss
 
         context = {"x0": x0, "z": z, "u": u, "x0_pred": x0_pred, "seg_logits": seg_logits}
         for name, value in [("total_loss", total_loss), ("si_loss", si_loss), ("seg_loss", seg_loss), ("endpoint_loss", endpoint_loss)]:
