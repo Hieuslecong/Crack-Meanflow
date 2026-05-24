@@ -55,3 +55,11 @@
 - exact fix: added `si_loss_weight`, set MF04 to low SI `0.05`, endpoint BCE+Dice+Tversky(0.2,0.8), endpoint weight `2.0`, thin `0.5`, seg `0.0`, full-val gate only.
 - retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python /home/hieulc/avitech11/crackmeanflow/scripts/train_crackmeanflow.py --config /home/hieulc/avitech11/crackmeanflow/configs/mf04_bce_dice_tversky_02_08.yaml`
 - retest result: `PASS`; full-val F1 `0.219894`, th `-0.8`, pred/GT `0.721874`, sampled_abs `1.0`, seg_abs `4.800064`, reload reproducible F1 `0.219894`.
+
+## 2026-05-25 MF05 endpoint-only long run
+- error: MF00/MF04 showed weak sampled-mask separation and SI harmed early training.
+- root cause: endpoint-only needed longer training; low-SI hybrid underperformed endpoint-only.
+- files changed: `configs/mf05_endpoint_long_tversky_02_08.yaml`, `scripts/evaluate_output_separation.py`, `crackmeanflow/train.py`, `reports/MF05_ENDPOINT_LONG_REPORT.md`, `reports/CRACKMEANFLOW_OUTPUT_SEPARATION_REPORT.md`.
+- exact fix: ran endpoint-only 12e with BCE+Dice+Tversky(0.2,0.8), endpoint weight `2.0`, thin `0.5`, SI/seg weights `0.0`; added sampled-mask crack/background separation diagnostics and 20 overlays.
+- retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python scripts/train_crackmeanflow.py --config configs/mf05_endpoint_long_tversky_02_08.yaml`
+- retest result: `PASS`; val F1 `0.400120`, test F1 `0.406104`, th `-0.8`, test pred/GT `0.984692`, test separation `0.694690`.

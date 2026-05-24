@@ -88,6 +88,7 @@ def _full_val_eval(model, val_pairs, cfg, device, eval_seed=0):
     seg_abs_max = []
     pred_ratios = {th: [] for th in thresholds}
     gt_ratios = []
+    crack_vals_all, bg_vals_all = [], []
     for batch in loader:
         image = batch["crack"].to(device)
         mask = batch["mask"].to(device)
@@ -105,6 +106,14 @@ def _full_val_eval(model, val_pairs, cfg, device, eval_seed=0):
         if seg_logits is not None:
             seg_abs_max.append(float(seg_logits.abs().max().item()))
         gt_ratios.append(float((mask > 0.5).float().mean().item()))
+        # separation diagnostics: sampled values on crack vs background pixels
+        gt_binary = (mask > 0.5).float()
+        crack_px = sampled[gt_binary > 0.5]
+        bg_px = sampled[gt_binary <= 0.5]
+        if crack_px.numel() > 0:
+            crack_vals_all.append(crack_px)
+        if bg_px.numel() > 0:
+            bg_vals_all.append(bg_px)
         for th in thresholds:
             pred = (sampled > th).float()
             pred_ratios[th].append(float(pred.mean().item()))
@@ -126,8 +135,24 @@ def _full_val_eval(model, val_pairs, cfg, device, eval_seed=0):
         "sampled_abs_max": max(sampled_abs_max) if sampled_abs_max else 0.0,
         "seg_logits_abs_max": max(seg_abs_max) if seg_abs_max else 0.0,
     }
+    # separation diagnostics
+    separation = {}
+    if crack_vals_all and bg_vals_all:
+        crack_cat = torch.cat(crack_vals_all)
+        bg_cat = torch.cat(bg_vals_all)
+        separation = {
+            "crack_mean": float(crack_cat.mean().item()),
+            "crack_std": float(crack_cat.std().item()),
+            "crack_median": float(crack_cat.median().item()),
+            "bg_mean": float(bg_cat.mean().item()),
+            "bg_std": float(bg_cat.std().item()),
+            "bg_median": float(bg_cat.median().item()),
+            "separation_score": float(crack_cat.mean().item() - bg_cat.mean().item()),
+            "crack_px_count": int(crack_cat.numel()),
+            "bg_px_count": int(bg_cat.numel()),
+        }
     model.train()
-    return best, sweep, stats
+    return best, sweep, stats, separation
 
 
 def train(cfg):
@@ -274,7 +299,7 @@ def train(cfg):
 
         # --- full validation gate; deterministic one-step flow output only ---
         eval_seed = int(cfg.get("eval", {}).get("eval_seed", 0))
-        val_metrics, val_sweep, val_stats = _full_val_eval(model, val_pairs if val_pairs else test_pairs, cfg, device, eval_seed=eval_seed)
+        val_metrics, val_sweep, val_stats, val_separation = _full_val_eval(model, val_pairs if val_pairs else test_pairs, cfg, device, eval_seed=eval_seed)
         logger.info(
             "Full val F1=%.4f th=%.3f pred/gt=%.3f sampled_abs=%.3f seg_abs=%.3f (best=%.4f)",
             val_metrics["f1"], val_metrics["best_th"], val_metrics["pred_gt_ratio"],
@@ -287,6 +312,7 @@ def train(cfg):
             save_checkpoint(best_ckpt_path, model, optimizer=optimizer, ema=ema, epoch=epoch, global_step=global_step, best_metrics=best_payload, config=cfg)
             (out_dir / "val_threshold_sweep.json").write_text(json.dumps(val_sweep, indent=2) + "\n")
             (out_dir / "sampled_mask_stats.json").write_text(json.dumps(val_stats, indent=2) + "\n")
+            (out_dir / "sampled_mask_separation.json").write_text(json.dumps(val_separation, indent=2) + "\n")
             (out_dir / "prediction_ratio_report.json").write_text(json.dumps({
                 "eval_seed": eval_seed,
                 "threshold": val_metrics["best_th"],
