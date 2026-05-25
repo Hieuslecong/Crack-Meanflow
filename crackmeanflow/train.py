@@ -29,6 +29,19 @@ from multi_task.mlt_unet import UNet  # noqa: E402
 logger = logging.getLogger("crackmeanflow.train")
 
 
+class DirectSegWrapper(nn.Module):
+    def __init__(self, unet):
+        super().__init__()
+        self.unet = unet
+
+    def forward(self, image):
+        b, _, h, w = image.shape
+        x_dummy = torch.zeros(b, 1, h, w, device=image.device, dtype=image.dtype)
+        t_dummy = torch.zeros(b, device=image.device, dtype=torch.long)
+        _, seg_logits = self.unet(x_dummy, t_dummy, image)
+        return seg_logits
+
+
 class EMA:
     def __init__(self, model, decay=0.9999):
         self.decay = decay
@@ -71,6 +84,30 @@ def _merge_global_metrics(metrics_list):
         "precision": float(precision), "recall": float(recall), "accuracy": float(accuracy),
         "tp": float(tp), "fp": float(fp), "fn": float(fn), "tn": float(tn),
     }
+
+
+def _build_teacher_model(cfg, device):
+    teacher_path = cfg["loss"].get("teacher_checkpoint")
+    if not teacher_path:
+        raise ValueError("loss.teacher_checkpoint is required when distill_weight > 0.")
+    teacher_cfg = cfg["loss"].get("teacher_model", {})
+    teacher_unet = UNet(
+        T=teacher_cfg.get("T", 1000),
+        ch=teacher_cfg.get("ch", 32),
+        ch_mult=teacher_cfg.get("ch_mult", [1, 2]),
+        attn=teacher_cfg.get("attn", []),
+        num_res_blocks=teacher_cfg.get("num_res_blocks", 2),
+        dropout=teacher_cfg.get("dropout", 0.1),
+    )
+    teacher = DirectSegWrapper(teacher_unet).to(device)
+    ckpt = torch.load(teacher_path, map_location=device)
+    state = ckpt.get("model", ckpt)
+    teacher.load_state_dict(state, strict=True)
+    teacher.eval()
+    for p in teacher.parameters():
+        p.requires_grad_(False)
+    logger.info("Loaded teacher checkpoint: %s  params=%.2fM", teacher_path, sum(p.numel() for p in teacher.parameters()) / 1e6)
+    return teacher
 
 
 @torch.no_grad()
@@ -202,6 +239,8 @@ def train(cfg):
     optimizer = torch.optim.AdamW(model.parameters(), lr=cfg["train"]["lr"], weight_decay=cfg["train"]["weight_decay"])
     ema = EMA(model, decay=cfg["train"]["ema_decay"])
     scaler = GradScaler()
+    distill_weight = cfg["loss"].get("distill_weight", 0.0)
+    teacher_model = _build_teacher_model(cfg, device) if distill_weight > 0.0 else None
     criterion = CrackSILoss(
         si_loss_kwargs=cfg["loss"]["si_loss_kwargs"],
         seg_loss_weight=cfg["loss"]["seg_loss_weight"],
@@ -212,6 +251,8 @@ def train(cfg):
         tversky_alpha=cfg["loss"].get("tversky_alpha", 0.3),
         tversky_beta=cfg["loss"].get("tversky_beta", 0.7),
         si_loss_weight=cfg["loss"].get("si_loss_weight", 1.0),
+        distill_weight=distill_weight,
+        teacher_model=teacher_model,
     )
 
     # --- resume ---

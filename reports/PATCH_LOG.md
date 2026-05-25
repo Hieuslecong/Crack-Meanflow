@@ -63,3 +63,25 @@
 - exact fix: ran endpoint-only 12e with BCE+Dice+Tversky(0.2,0.8), endpoint weight `2.0`, thin `0.5`, SI/seg weights `0.0`; added sampled-mask crack/background separation diagnostics and 20 overlays.
 - retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python scripts/train_crackmeanflow.py --config configs/mf05_endpoint_long_tversky_02_08.yaml`
 - retest result: `PASS`; val F1 `0.400120`, test F1 `0.406104`, th `-0.8`, test pred/GT `0.984692`, test separation `0.694690`.
+
+## 2026-05-25 MF05 longer 24e plateau
+- error: MF05 12e passed improvement gate, requiring endpoint-only continuation before SI.
+- root cause: endpoint-only stage might still improve, but needed validation/test evidence.
+- files changed: `configs/mf05_longer_24e.yaml`, `configs/mf06_si_warm_start.yaml`, `reports/MF05_LONGER_24E_REPORT.md`, `reports/MF05_REPEATED_SEED_REPORT.md`, `reports/CRACKMEANFLOW_BASELINE_TABLE.md`.
+- exact fix: initialized MF05_LONGER_24E from MF05 best checkpoint, trained 12 additional endpoint-only epochs, evaluated test with val-selected threshold, then repeated-seed eval `[0,1,2,3,4]`.
+- retest command: `/home/hieulc/miniconda3/envs/pytorch_hieus/bin/python scripts/train_crackmeanflow.py --config configs/mf05_longer_24e.yaml`
+- retest result: `PASS`; val F1 `0.403906`, test F1 `0.393590`, th `-0.8`, repeated-seed mean test F1 `0.391713`; MF05 12e remains best with repeated-seed mean `0.403194`.
+
+## 2026-05-25 MF06 SI warm-start failed
+- error: endpoint-only MF05 is not a final CrackMeanFlow claim; SI warm-start required, but previous SI configs harmed training.
+- root cause: even light SI (`0.01`) still dominated early optimization from MF05 endpoint checkpoint and degraded sampled-mask separation.
+- files changed: `configs/mf06_si_warm_start.yaml`, `reports/MF06_SI_WARM_START_REPORT.md`, `reports/CRACKMEANFLOW_BASELINE_TABLE.md`.
+- exact fix: ran MF06 from MF05 best with SI `0.01`, endpoint `2.0`, thin `0.5`, seg `0.0`, lr `5e-5`, then evaluated one-step sampled-mask output with full-val threshold.
+- retest result: `FAIL_EXPECTED`; val F1 `0.314955`, test F1 `0.313674`, th `-0.7`, test pred/GT `1.303935`, test separation `0.328404`; triggers MF10 teacher distill.
+
+## 2026-05-25 MF10 teacher distill no improvement
+- error: SI warm-start hurt, so rule C required teacher-guided endpoint training while preserving one-step sampled-mask eval.
+- root cause: teacher direct segmentation signal improved full-val only marginally and did not improve held-out test; EMA weights badly lagged endpoint calibration.
+- files changed: `crackmeanflow/train.py`, `crackmeanflow/loss.py`, `configs/mf10_teacher_distill_light.yaml`, `reports/MF10_TEACHER_DISTILL_REPORT.md`, `reports/CRACKMEANFLOW_BASELINE_TABLE.md`.
+- exact fix: loaded frozen TEACHER01 via `DirectSegWrapper`, added `distill_weight=0.5`, trained from MF05 best with SI disabled, evaluated live non-EMA checkpoint using one-step `sampled_mask=z-u` and full-val threshold.
+- retest result: `NO_IMPROVEMENT`; val F1 `0.403882`, test F1 `0.395690`, th `-0.8`, test pred/GT `0.877230`, test separation `0.648657`; MF05 12e remains best.
