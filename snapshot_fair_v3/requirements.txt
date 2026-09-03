@@ -1,0 +1,7 @@
+torch>=2.10,<2.11
+numpy>=2.3,<2.4
+pillow>=12.3,<13
+pyyaml>=6.0,<7
+scipy>=1.17,<1.18
+scikit-image>=0.26,<0.27
+pytest>=9,<10
