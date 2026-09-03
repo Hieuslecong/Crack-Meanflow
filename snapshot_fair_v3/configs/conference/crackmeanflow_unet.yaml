@@ -1,0 +1,58 @@
+track: conference
+experiment: CONFERENCE_CRACKMEANFLOW_U
+backbone: unet
+model:
+  T: 500
+  ch: 64
+  ch_mult: [1, 2, 2, 4]
+  attn: [2]
+  num_res_blocks: 2
+  dropout: 0.0
+  img_size: 256
+train:
+  epochs: 100
+  batch_size: 4
+  grad_accum_steps: 2
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  warmup_epochs: 10
+  ema_decay: 0.999
+  max_grad_norm: 1.0
+  augment: true
+  photometric_augment: true
+  mask_resize_mode: nearest
+  drop_last: true
+  source_balance:
+    enabled: true
+    regex: "^([^_]+)"
+    power: 0.5
+    cap_ratio: 4.0
+  normal_negatives:
+    train: false
+    val: false
+    test: false
+  seed: 42
+loss:
+  ratio_r_not_equal_t: 0.35
+  boundary_prob: 0.15
+  time_mu: -0.4
+  time_sigma: 1.0
+  adaptive_p: 0.75
+  endpoint_loss_weight: 1.0
+  thin_loss_weight: 0.5
+  seg_loss_weight: 0.1
+  cfg_drop_prob: 0.0
+  boundary_sampling: stratified
+  time_curriculum:
+    enabled: true
+    stages:
+      - {epochs: [0, 10], fm_ratio: 1.0, max_gap: 0.0, boundary_prob: 0.0}
+      - {epochs: [10, 30], fm_ratio: 0.75, max_gap: 0.25, boundary_prob: 0.0}
+      - {epochs: [30, 60], fm_ratio: 0.60, max_gap: 0.50, boundary_prob: 0.0}
+      - {epochs: [60, 100000], fm_ratio: 0.50, max_gap: 1.0, boundary_prob: 0.15}
+eval:
+  num_steps: 1
+  cfg_scale: 1.0
+  eval_seeds: [0, 1, 2, 3, 4]
+  thresholds: [-2.0, -1.6, -1.2, -1.0, -0.8, -0.6, -0.4, -0.2, 0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.6, 2.0]
+  nfe_sweep: [1, 2, 4, 8]
