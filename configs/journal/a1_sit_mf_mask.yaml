@@ -1,0 +1,43 @@
+track: journal_ablation
+experiment: A1_SIT_ORIGINAL_MF_MASK
+backbone: sit_mf
+model: {size: S, patch: 8, img_size: 256, in_ch: 1, cond_ch: 3}
+train:
+  epochs: 150
+  batch_size: 4
+  grad_accum_steps: 4
+  lr: 0.0001
+  weight_decay: 0.0
+  warmup_epochs: 15
+  ema_decay: 0.999
+  max_grad_norm: 1.0
+  augment: true
+  photometric_augment: true
+  mask_resize_mode: nearest
+  seed: 42
+  drop_last: true
+  source_balance: {enabled: true, regex: '^([^_]+)', power: 0.5, cap_ratio: 4.0}
+  normal_negatives: {train: false, val: false, test: false}
+loss:
+  ratio_r_not_equal_t: 0.35
+  boundary_prob: 0.15
+  time_mu: -0.4
+  time_sigma: 1.0
+  adaptive_p: 0.75
+  endpoint_loss_weight: 1.0
+  thin_loss_weight: 0.5
+  seg_loss_weight: 0.1
+  cfg_drop_prob: 0.0
+  boundary_sampling: stratified
+  time_curriculum:
+    enabled: true
+    stages:
+      - {epochs: [0,15], fm_ratio: 1.0, max_gap: 0.0, boundary_prob: 0.0}
+      - {epochs: [15,45], fm_ratio: 0.75, max_gap: 0.25, boundary_prob: 0.0}
+      - {epochs: [45,90], fm_ratio: 0.6, max_gap: 0.5, boundary_prob: 0.0}
+      - {epochs: [90,100000], fm_ratio: 0.5, max_gap: 1.0, boundary_prob: 0.15}
+eval:
+  num_steps: 1
+  cfg_scale: 1.0
+  eval_seeds: [0,1,2,3,4]
+  thresholds: [-2.0,-1.6,-1.2,-1.0,-0.8,-0.6,-0.4,-0.2,0.0,0.2,0.4,0.6,0.8,1.0,1.2,1.6,2.0]
