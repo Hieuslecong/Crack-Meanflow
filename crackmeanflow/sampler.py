@@ -1,52 +1,18 @@
+"""One-step (and few-step) MeanFlow sampling. t=1 noise, t=0 data."""
 import torch
 
-
-def _get_model_attr(model, name):
-    return getattr(model.module, name) if hasattr(model, "module") else getattr(model, name)
-
-
+def _get(model,name): return getattr(model.module,name) if hasattr(model,'module') else getattr(model,name)
 @torch.no_grad()
-def crack_meanflow_sampler(model, z, crack_image, num_steps=1, cfg_scale=1.0, clamp=True):
-    batch_size = z.shape[0]
-    device = z.device
-    do_cfg = cfg_scale > 1.0
-    sampled = z
-
-    def _forward(sample, r, t, y):
-        return model(sample, r, t, y=y)
-
-    if num_steps == 1:
-        r = torch.zeros(batch_size, device=device)
-        t = torch.ones(batch_size, device=device)
+def crack_meanflow_sampler(model,z,crack_image,num_steps=1,cfg_scale=1.0,clamp=False):
+    if num_steps<1: raise ValueError(f'num_steps must be >=1, got {num_steps}')
+    b,device=z.shape[0],z.device; do_cfg=cfg_scale>1.; x=z
+    def step(x_cur,r_val,t_val):
+        r=torch.full((b,),float(r_val),device=device); t=torch.full((b,),float(t_val),device=device)
         if do_cfg:
-            z2 = torch.cat([sampled, sampled], dim=0)
-            r2 = torch.cat([r, r], dim=0)
-            t2 = torch.cat([t, t], dim=0)
-            y2 = torch.cat([crack_image, torch.zeros_like(crack_image)], dim=0)
-            u2 = _forward(z2, r2, t2, y2)
-            u_cond, u_uncond = torch.chunk(u2, 2, dim=0)
-            u = u_uncond + cfg_scale * (u_cond - u_uncond)
-        else:
-            u = _forward(sampled, r, t, crack_image)
-        sampled = sampled - u
-    else:
-        grid = torch.linspace(1.0, 0.0, num_steps + 1, device=device)
-        for idx in range(num_steps):
-            t_cur = torch.full((batch_size,), float(grid[idx].item()), device=device)
-            t_next = torch.full((batch_size,), float(grid[idx + 1].item()), device=device)
-            if do_cfg:
-                z2 = torch.cat([sampled, sampled], dim=0)
-                r2 = torch.cat([t_next, t_next], dim=0)
-                t2 = torch.cat([t_cur, t_cur], dim=0)
-                y2 = torch.cat([crack_image, torch.zeros_like(crack_image)], dim=0)
-                u2 = _forward(z2, r2, t2, y2)
-                u_cond, u_uncond = torch.chunk(u2, 2, dim=0)
-                u = u_uncond + cfg_scale * (u_cond - u_uncond)
-            else:
-                u = _forward(sampled, t_next, t_cur, crack_image)
-            sampled = sampled + (t_next[:, None, None, None] - t_cur[:, None, None, None]) * u
-
-    if clamp:
-        sampled = sampled.clamp(-1.0, 1.0)
-    seg_logits = _get_model_attr(model, "get_seg_logits")()
-    return sampled, seg_logits
+            xx=torch.cat([x_cur,x_cur],0); rr=torch.cat([r,r],0); tt=torch.cat([t,t],0); yy=torch.cat([crack_image,torch.zeros_like(crack_image)],0); uc,uu=torch.chunk(model(xx,rr,tt,y=yy),2,dim=0); u=uu+cfg_scale*(uc-uu)
+        else: u=model(x_cur,r,t,y=crack_image)
+        return x_cur-(t_val-r_val)*u
+    grid=torch.linspace(1.,0.,num_steps+1).tolist()
+    for i in range(num_steps): x=step(x,grid[i+1],grid[i])
+    if clamp: x=x.clamp(-1.,1.)
+    base=model.module if hasattr(model,'module') else model; seg=base.get_seg_logits() if hasattr(base,'get_seg_logits') else None; return x,seg
