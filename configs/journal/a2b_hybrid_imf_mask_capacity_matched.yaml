@@ -1,0 +1,32 @@
+track: journal_ablation
+experiment: A2B_HYBRID_IMF_MASK_CAPACITY_MATCHED
+backbone: hybrid_imf_mask
+model: {size: S, patch: 8, img_size: 256, background_init: -0.95}
+train:
+  epochs: 200
+  batch_size: 1
+  grad_accum_steps: 8
+  lr: 7.5e-05
+  weight_decay: 0.0
+  warmup_epochs: 15
+  ema_decay: 0.999
+  max_grad_norm: 1.0
+  augment: true
+  photometric_augment: true
+  mask_resize_mode: nearest
+  seed: 42
+  drop_last: true
+  source_balance: {enabled: true, regex: '^([^_]+)', power: 0.5, cap_ratio: 4.0}
+  normal_negatives: {train: false, val: false, test: false}
+loss:
+  data_proportion: 0.5
+  time_mu: -0.4
+  time_sigma: 1.0
+  norm_p: 1.0
+  norm_eps: 0.01
+  clean_weight: 0.25
+  fm_sampling: stratified
+eval:
+  num_steps: 1
+  eval_seeds: [0,1,2,3,4]
+  thresholds: [-2.0,-1.6,-1.2,-1.0,-0.8,-0.6,-0.4,-0.2,0.0,0.2,0.4,0.6,0.8,1.0,1.2,1.6,2.0]
