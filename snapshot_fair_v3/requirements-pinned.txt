@@ -1,0 +1,9 @@
+# Versions verified in the current CPU audit runtime on 2026-09-03.
+# For the target RTX 3090 environment, pin the CUDA-enabled torch wheel separately.
+torch==2.10.0
+numpy==2.3.5
+pillow==12.3.0
+pyyaml==6.0.3
+scipy==1.17.0
+scikit-image==0.26.0
+pytest==9.0.2
