@@ -3,7 +3,7 @@ name: Materialize canonical clean tree
 on:
   push:
     branches:
-      - research/local-clean-canonical-v1
+      - research/local-clean-papergrade-v1-20260905
 
 permissions:
   contents: write
