@@ -1,0 +1,49 @@
+name: Materialize canonical clean tree
+
+on:
+  push:
+    branches:
+      - research/local-clean-canonical-v1
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ !contains(github.event.head_commit.message, '[canonical-materialized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify canonical payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .canonical_payload/part-* > /tmp/cmf.b64
+          test "$(wc -c < /tmp/cmf.b64)" -eq 103952
+          base64 -d /tmp/cmf.b64 > /tmp/cmf.tar.xz
+          echo "ac722c809ff3c0e245c0c2b2b3ede53a5d11a591940d562ace48ac27030bc6f8  /tmp/cmf.tar.xz" | sha256sum -c -
+
+      - name: Replace legacy tree with canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          tar -xJf /tmp/cmf.tar.xz -C .
+          test -f README.md
+          test -f configs/protocol/paper_protocol.yaml
+          test -f crackmeanflow/factory.py
+          test ! -e snapshot_fair_v3
+          test ! -e .canonical_payload
+
+      - name: Commit canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: materialize canonical clean source [canonical-materialized]"
+          git push
