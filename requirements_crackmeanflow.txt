@@ -1,6 +1,0 @@
-torch
- torchvision
- pillow
- pyyaml
- numpy
- scikit-image  # optional, thin metrics fallback exists if missing

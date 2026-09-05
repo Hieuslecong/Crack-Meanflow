@@ -1,0 +1,58 @@
+name: Materialize local-clean final tree
+
+on:
+  push:
+    branches:
+      - research/local-clean-final-v1
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify exact archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .canonical_payload_bin/part-* > /tmp/cmf.tar.xz
+          test "$(wc -c < /tmp/cmf.tar.xz)" -eq 77836
+          echo "e1b30c8f3c5e14bbc4ad006b7e5b41d9d13bad8349e1f54c0d2b1ac7ba0ad98c  /tmp/cmf.tar.xz" | sha256sum -c -
+      - name: Materialize canonical source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/cmf-source
+          mkdir -p /tmp/cmf-source
+          tar -xJf /tmp/cmf.tar.xz -C /tmp/cmf-source
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/cmf-source/. .
+          test -f README.md
+          test -f requirements.txt
+          test -f requirements-dev.txt
+          test -d configs
+          test -d crackmeanflow
+          test -d scripts
+          test -d tests
+          test -d docs
+          test -d reports
+          test -d third_party
+          test ! -e .canonical_payload_bin
+          test ! -e .codegraph
+          test ! -e snapshot_fair_v3
+          test ! -e requirements_crackmeanflow.txt
+          python -m compileall -q crackmeanflow scripts tests
+      - name: Commit clean source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: publish canonical local-clean source"
+          git push origin HEAD:research/local-clean-final-v1
