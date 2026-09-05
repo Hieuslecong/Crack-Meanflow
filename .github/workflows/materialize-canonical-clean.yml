@@ -17,12 +17,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Decode and verify canonical payload
+      - name: Recover, decode and verify canonical payload
         shell: bash
         run: |
           set -euo pipefail
-          cat .canonical_payload/part-* > /tmp/cmf.b64
-          base64 -d /tmp/cmf.b64 > /tmp/cmf.tar.xz
+          python - <<'PY'
+          import base64, hashlib
+          from pathlib import Path
+
+          expected = 'ac722c809ff3c0e245c0c2b2b3ede53a5d11a591940d562ace48ac27030bc6f8'
+          parts = sorted(Path('.canonical_payload').glob('part-*'), key=lambda p: p.name)
+          names = [p.name for p in parts]
+          target_name = 'part-11a10'
+          if target_name not in names:
+              raise SystemExit(f'missing {target_name}')
+          chunks = [p.read_text(encoding='utf-8') for p in parts]
+          target_i = names.index(target_name)
+          target = chunks[target_i]
+          if len(target) != 999:
+              raise SystemExit(f'unexpected {target_name} length={len(target)}')
+          raw = ''.join(chunks)
+          insert_at = sum(map(len, chunks[:target_i])) + 499
+          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+          found = None
+          for c in alphabet:
+              candidate = raw[:insert_at] + c + raw[insert_at:]
+              try:
+                  decoded = base64.b64decode(candidate, validate=True)
+              except Exception:
+                  continue
+              if hashlib.sha256(decoded).hexdigest() == expected:
+                  found = (c, decoded)
+                  break
+          if found is None:
+              raise SystemExit('unable to recover missing base64 character at validated split point')
+          print(f'recovered missing base64 character; archive sha256={expected}')
+          Path('/tmp/cmf.tar.xz').write_bytes(found[1])
+          PY
           rm -rf /tmp/cmf-tree
           mkdir -p /tmp/cmf-tree
           tar -xJf /tmp/cmf.tar.xz -C /tmp/cmf-tree
