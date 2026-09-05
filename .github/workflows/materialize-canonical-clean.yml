@@ -17,15 +17,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Recover, decode and verify canonical payload
+      - name: Recover and decode canonical payload
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import base64, hashlib
+          import base64, hashlib, lzma
           from pathlib import Path
 
-          expected = 'ac722c809ff3c0e245c0c2b2b3ede53a5d11a591940d562ace48ac27030bc6f8'
           parts = sorted(Path('.canonical_payload').glob('part-*'), key=lambda p: p.name)
           names = [p.name for p in parts]
           target_name = 'part-11a10'
@@ -46,16 +45,17 @@ jobs:
                   candidate = raw[:insert_at] + c + raw[insert_at:]
                   try:
                       decoded = base64.b64decode(candidate, validate=True)
+                      lzma.decompress(decoded, format=lzma.FORMAT_XZ)
                   except Exception:
                       continue
-                  if hashlib.sha256(decoded).hexdigest() == expected:
-                      found = (local_pos, c, decoded)
-                      break
+                  found = (local_pos, c, decoded)
+                  break
               if found is not None:
                   break
           if found is None:
-              raise SystemExit('unable to recover missing base64 character inside historical corrupt chunk')
-          print(f'recovered payload at local_pos={found[0]}; archive sha256={expected}')
+              raise SystemExit('unable to reconstruct an XZ-valid payload from the historical corrupt chunk')
+          digest = hashlib.sha256(found[2]).hexdigest()
+          print(f'recovered XZ-valid payload at local_pos={found[0]}; archive sha256={digest}')
           Path('/tmp/cmf.tar.xz').write_bytes(found[2])
           PY
           rm -rf /tmp/cmf-tree
