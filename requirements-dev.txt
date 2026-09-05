@@ -1,0 +1,8 @@
+# CPU audit environment used in ChatGPT; do not use this torch pin blindly on the RTX 3090.
+torch==2.10.0
+numpy==2.3.5
+pillow==12.3.0
+pyyaml==6.0.3
+scipy==1.17.0
+scikit-image==0.26.0
+pytest==9.0.2

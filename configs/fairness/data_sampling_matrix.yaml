@@ -1,0 +1,24 @@
+protocol: data_sampling_sensitivity
+models:
+  Conference: configs/conference/crackmeanflow_unet.yaml
+  A2B_BASELINE: configs/journal/a2b_original_mismatch_control.yaml
+  A5_BASELINE: configs/journal/a5_geocrack_imf_baseline.yaml
+  A2B_ENDPOINT: configs/journal/a2b_hybrid_imf_mask_capacity_matched.yaml
+  A5_ENDPOINT: configs/journal/a5_geocrack_imf_endpoint_candidate.yaml
+variants:
+  UNIFORM_CROP:
+    enabled: false
+    unit: uniform_crop_without_replacement
+  PARENT_SQRT_REWEIGHTED_REPLACEMENT:
+    enabled: true
+    unit: parent_group
+    regex: ^([^_]+)
+    power: 0.5
+    cap_ratio: 4.0
+rules:
+- UNIFORM_CROP is the canonical CFD-only paper protocol.
+- PARENT_SQRT_REWEIGHTED_REPLACEMENT is diagnostic sensitivity only and must not replace
+  the canonical result after seeing OOD outcomes.
+- All compared models must use the same sampling variant within a table.
+- PARENT_SQRT_REWEIGHTED_REPLACEMENT uses per-crop weight count(parent)^-0.5; it is
+  not an equal-parent-mass sampler.

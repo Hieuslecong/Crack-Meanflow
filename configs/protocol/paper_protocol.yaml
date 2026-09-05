@@ -1,0 +1,112 @@
+protocol_version: CRACKMEANFLOW_PAPER_PROTOCOL_V1
+source_dataset:
+  name: CFD
+  training_only: true
+  split_unit: parent_group
+  canonical_sampling: uniform_crop_without_replacement
+  parent_group_regex: ^([^_]+)
+  mask_resize_mode: nearest
+  resize_policy: stretch_square
+  num_workers: 0
+  img_size: 256
+  augment: true
+  photometric_augment: true
+  mask_binarization: auto_binary_safe
+  deterministic: true
+  deterministic_warn_only: false
+  drop_incomplete_accumulation: true
+  normal_negatives:
+    train: false
+    val: false
+    test: false
+models:
+  Conference:
+    config: configs/conference/crackmeanflow_unet.yaml
+    role: conference_main
+    meanflow_required: true
+    nfe: 1
+  A2B_BASELINE:
+    config: configs/journal/a2b_original_mismatch_control.yaml
+    role: capacity_matched_baseline_control
+    meanflow_required: true
+    nfe: 1
+  A5_BASELINE:
+    config: configs/journal/a5_geocrack_imf_baseline.yaml
+    role: journal_baseline_pre_endpoint
+    meanflow_required: true
+    nfe: 1
+  A2B_ENDPOINT:
+    config: configs/journal/a2b_hybrid_imf_mask_capacity_matched.yaml
+    role: capacity_matched_endpoint_aware_control
+    meanflow_required: true
+    nfe: 1
+  A5_ENDPOINT:
+    config: configs/journal/a5_geocrack_imf_endpoint_candidate.yaml
+    role: journal_candidate_endpoint_aware
+    meanflow_required: true
+    nfe: 1
+  A5_ENDPOINT_NO_GIC:
+    config: configs/journal/a5_geocrack_imf_no_gic_control.yaml
+    role: endpoint_candidate_no_gic_one_variable_control
+    meanflow_required: true
+    nfe: 1
+checkpoint_selection:
+  source_validation_only: true
+  inference_noise_seeds:
+  - 0
+  - 1
+  - 2
+  threshold_grid: final_threshold_grid
+  metric: pixel_micro_f1
+  target_data_used: false
+  validation_interval_epochs: 5
+  validation_interval_optimizer_steps_on_cfd: 1050
+  eval_batch_size: 2
+final_threshold_lock:
+  source_validation_only: true
+  inference_noise_seeds:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  metric: mean_pixel_micro_f1
+  target_data_used: false
+headline_evaluation:
+  nfe: 1
+  threshold_source: frozen_source_validation_lock
+  target_lock_required: true
+  source_tree_match_required: true
+statistics:
+  minimum_training_seeds: 3
+  preferred_training_seeds: 5
+  ci: student_t_95
+  cfd_parent_group_bootstrap: true
+fairness:
+  matched_optimizer_steps: 21000
+  primary_label: matched_optimizer_budget
+  common_optimizer_recipe_sensitivity_required: true
+  uniform_crop_is_canonical: true
+  parent_sqrt_reweighted_replacement_is_sensitivity_only: true
+domain_roles:
+  GAPS384: development_ood_if_used_for_method_design
+  OmniCrack: development_ood_if_used_for_method_design
+  final_untouched_ood: must_be_frozen_before_final_claim
+release:
+  conference_unet_redistribution_rights_required_before_public_push: true
+ablation_ladder:
+  baseline_geometry_effect:
+  - A2B_BASELINE
+  - A5_BASELINE
+  endpoint_geometry_effect:
+  - A2B_ENDPOINT
+  - A5_ENDPOINT
+  endpoint_effect_direct_mask:
+  - A2B_BASELINE
+  - A2B_ENDPOINT
+  endpoint_effect_geometry:
+  - A5_BASELINE
+  - A5_ENDPOINT
+  gic_effect_endpoint_geometry:
+  - A5_ENDPOINT
+  - A5_ENDPOINT_NO_GIC

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Training/runtime artifacts
+outputs/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.tmp
+
+# Local datasets / generated locks
+data/
+datasets/
+CFD_prepared*/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

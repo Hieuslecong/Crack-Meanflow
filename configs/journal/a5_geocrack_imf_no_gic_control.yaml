@@ -1,0 +1,96 @@
+track: journal_ablation
+experiment: A5_GEOCRACK_IMF_NO_GIC_CONTROL
+backbone: geocrack_imf
+model:
+  size: S
+  patch: 8
+  img_size: 256
+  max_radius: 16.0
+  radius_bins: 8
+  local_refine: true
+  background_init: -0.95
+  representation: centerline_edt
+  distance_encoding: sqrt
+train:
+  epochs: 200
+  batch_size: 1
+  grad_accum_steps: 8
+  drop_incomplete_accumulation: true
+  lr: 7.5e-05
+  weight_decay: 0.0
+  warmup_epochs: 15
+  ema_decay: 0.999
+  max_grad_norm: 1.0
+  augment: true
+  photometric_augment: true
+  mask_resize_mode: nearest
+  seed: 42
+  parent_group_regex: ^([^_]+)
+  drop_last: true
+  normal_negatives:
+    train: false
+    val: false
+    test: false
+  sample_balance:
+    enabled: false
+    regex: ^([^_]+)
+    power: 0.5
+    cap_ratio: 4.0
+    unit: uniform_crop_without_replacement
+    rationale: CFD-only canonical training uses deterministic no-replacement ordering;
+      full-accumulation fairness consumes the same first 1680/1682 crops for all models
+      each epoch, with the two omitted crop identities rotating deterministically
+      across epochs.
+  mask_binarization: auto_binary_safe
+  deterministic: true
+  deterministic_warn_only: false
+  resize_policy: stretch_square
+  num_workers: 0
+loss:
+  data_proportion: 0.5
+  time_mu: -0.4
+  time_sigma: 1.0
+  norm_p: 1.0
+  norm_eps: 0.01
+  geometry_weight: 0.5
+  mask_weight: 0.5
+  radius_weight: 1.0
+  gic_weight: 0.0
+  gic_probability: 0.0
+  fm_sampling: stratified
+  gic_sampling: stratified_independent
+  endpoint_probability: 0.15
+  endpoint_sampling: stratified_disjoint
+eval:
+  num_steps: 1
+  eval_seeds: &id001
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  thresholds:
+  - 0.05
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+  - 0.95
+  final_threshold_calibration_seeds: *id001
+  final_threshold_grid:
+    start: 0.05
+    stop: 0.95
+    step: 0.025
+  checkpoint_selection_seeds:
+  - 0
+  - 1
+  - 2
+  checkpoint_use_final_threshold_grid: true
+  batch_size: 2
+  checkpoint_validation_interval_epochs: 5
+protocol_role: endpoint_candidate_no_gic_one_variable_control

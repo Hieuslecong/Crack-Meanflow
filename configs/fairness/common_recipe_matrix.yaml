@@ -1,0 +1,24 @@
+protocol: optimizer_recipe_sensitivity
+matched_optimizer_steps: 21000
+models:
+  Conference: configs/conference/crackmeanflow_unet.yaml
+  A2B_BASELINE: configs/journal/a2b_original_mismatch_control.yaml
+  A5_BASELINE: configs/journal/a5_geocrack_imf_baseline.yaml
+  A2B_ENDPOINT: configs/journal/a2b_hybrid_imf_mask_capacity_matched.yaml
+  A5_ENDPOINT: configs/journal/a5_geocrack_imf_endpoint_candidate.yaml
+recipes:
+  CONFERENCE_RECIPE:
+    lr: 0.0001
+    weight_decay: 0.0001
+    warmup_epochs: 10
+  JOURNAL_RECIPE:
+    lr: 7.5e-05
+    weight_decay: 0.0
+    warmup_epochs: 15
+rules:
+- Only lr, weight_decay, warmup_epochs, max_optimizer_steps, experiment and protocol_role
+  may change.
+- Data, augmentation, resolution, model, loss, NFE and threshold policy must remain
+  model-specific base values.
+- This matrix is a sensitivity analysis; primary matched-budget results keep each
+  preregistered recipe.

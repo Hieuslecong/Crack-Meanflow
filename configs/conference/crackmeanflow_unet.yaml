@@ -1,0 +1,134 @@
+track: conference
+experiment: CONFERENCE_CRACKMEANFLOW_U
+backbone: unet
+model:
+  T: 500
+  ch: 64
+  ch_mult:
+  - 1
+  - 2
+  - 2
+  - 4
+  attn:
+  - 2
+  num_res_blocks: 2
+  dropout: 0.0
+  img_size: 256
+train:
+  epochs: 100
+  batch_size: 4
+  grad_accum_steps: 2
+  drop_incomplete_accumulation: true
+  lr: 0.0001
+  weight_decay: 0.0001
+  warmup_epochs: 10
+  ema_decay: 0.999
+  max_grad_norm: 1.0
+  augment: true
+  photometric_augment: true
+  mask_resize_mode: nearest
+  drop_last: true
+  normal_negatives:
+    train: false
+    val: false
+    test: false
+  seed: 42
+  parent_group_regex: ^([^_]+)
+  sample_balance:
+    enabled: false
+    regex: ^([^_]+)
+    power: 0.5
+    cap_ratio: 4.0
+    unit: uniform_crop_without_replacement
+    rationale: CFD-only canonical training uses deterministic no-replacement ordering;
+      full-accumulation fairness consumes the same first 1680/1682 crops for all models
+      each epoch, with the two omitted crop identities rotating deterministically
+      across epochs.
+  mask_binarization: auto_binary_safe
+  deterministic: true
+  deterministic_warn_only: false
+  resize_policy: stretch_square
+  num_workers: 0
+loss:
+  ratio_r_not_equal_t: 0.35
+  boundary_prob: 0.15
+  time_mu: -0.4
+  time_sigma: 1.0
+  adaptive_p: 0.75
+  endpoint_loss_weight: 1.0
+  thin_loss_weight: 0.5
+  seg_loss_weight: 0.1
+  cfg_drop_prob: 0.0
+  boundary_sampling: stratified
+  time_curriculum:
+    enabled: true
+    stages:
+    - epochs:
+      - 0
+      - 10
+      fm_ratio: 1.0
+      max_gap: 0.0
+      boundary_prob: 0.0
+    - epochs:
+      - 10
+      - 30
+      fm_ratio: 0.75
+      max_gap: 0.25
+      boundary_prob: 0.0
+    - epochs:
+      - 30
+      - 60
+      fm_ratio: 0.6
+      max_gap: 0.5
+      boundary_prob: 0.0
+    - epochs:
+      - 60
+      - 100000
+      fm_ratio: 0.5
+      max_gap: 1.0
+      boundary_prob: 0.15
+eval:
+  num_steps: 1
+  cfg_scale: 1.0
+  eval_seeds: &id001
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  thresholds:
+  - -2.0
+  - -1.6
+  - -1.2
+  - -1.0
+  - -0.8
+  - -0.6
+  - -0.4
+  - -0.2
+  - 0.0
+  - 0.2
+  - 0.4
+  - 0.6
+  - 0.8
+  - 1.0
+  - 1.2
+  - 1.6
+  - 2.0
+  nfe_sweep:
+  - 1
+  - 2
+  - 4
+  - 8
+  final_threshold_calibration_seeds: *id001
+  final_threshold_grid:
+    start: -2.0
+    stop: 2.0
+    step: 0.05
+  checkpoint_selection_seeds:
+  - 0
+  - 1
+  - 2
+  checkpoint_use_final_threshold_grid: true
+  batch_size: 2
+  checkpoint_validation_interval_epochs: 5
+protocol_role: conference_main

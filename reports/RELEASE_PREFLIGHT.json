@@ -1,0 +1,34 @@
+{
+  "source_tree_sha256": "36c96259020b8ba82224dde1ae43b7ce139d2b453ec049f56a8dcb07658d1bdd",
+  "compileall_pass": true,
+  "tests_pass": true,
+  "protocol_preflight_pass": true,
+  "third_party_provenance": {
+    "component": "crackmeanflow/conference/models/mlt_unet.py",
+    "implementation_status": "PROJECT_AUTHORED_CLEAN_ROOM",
+    "historical_contract_source": "The original CrackMeanFlow project used a CrackDiff-derived multi-task U-Net with the documented (velocity, segmentation_logits) output contract.",
+    "architecture_compatibility_target": "Historical Conference dual-decoder U-Net topology documented by the project audit.",
+    "clean_room_basis": [
+      "documented tensor/input/output contract",
+      "documented module topology and channel schedule",
+      "documented parameter-count compatibility target",
+      "independent project-authored source expression"
+    ],
+    "historical_parameter_count_target": 30839346,
+    "current_parameter_count_verified": 30839346,
+    "redistribution_license_status": "CONFIRMED",
+    "redistribution_basis": "Current file is a project-authored clean-room implementation and does not redistribute the external reference source text.",
+    "external_reference_code_included": false,
+    "release_policy": "PUBLIC_RELEASE_ALLOWED_FOR_CURRENT_CLEAN_ROOM_IMPLEMENTATION",
+    "scientific_constraint": "Do not silently change the Conference topology or swap the velocity and segmentation output order without rerunning the Conference baseline and design-lock tests.",
+    "public_reference_metadata_recheck_2026_09_05": {
+      "zhysess_CrackDiff_github_license_field": null,
+      "yvonapedo_retinaDiffusion_github_license_field": null,
+      "note": "External repositories remain reference-only; no external source file is redistributed by this snapshot."
+    }
+  },
+  "absolute_path_scan_pass": true,
+  "issues": [],
+  "release_ready": true,
+  "note": "This preflight never performs a GitHub write/push."
+}
