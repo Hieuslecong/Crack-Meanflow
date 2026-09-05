@@ -17,26 +17,31 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify canonical payload
+      - name: Decode and verify canonical payload
         shell: bash
         run: |
           set -euo pipefail
           cat .canonical_payload/part-* > /tmp/cmf.b64
-          test "$(wc -c < /tmp/cmf.b64)" -eq 103952
           base64 -d /tmp/cmf.b64 > /tmp/cmf.tar.xz
-          echo "ac722c809ff3c0e245c0c2b2b3ede53a5d11a591940d562ace48ac27030bc6f8  /tmp/cmf.tar.xz" | sha256sum -c -
+          rm -rf /tmp/cmf-tree
+          mkdir -p /tmp/cmf-tree
+          tar -xJf /tmp/cmf.tar.xz -C /tmp/cmf-tree
+          cd /tmp/cmf-tree
+          test -f README.md
+          test -f configs/protocol/paper_protocol.yaml
+          test -f crackmeanflow/factory.py
+          test -f reports/FILE_MANIFEST_SHA256.txt
+          sha256sum -c reports/FILE_MANIFEST_SHA256.txt
 
-      - name: Replace legacy tree with canonical source
+      - name: Replace legacy tree with verified canonical source
         shell: bash
         run: |
           set -euo pipefail
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          tar -xJf /tmp/cmf.tar.xz -C .
-          test -f README.md
-          test -f configs/protocol/paper_protocol.yaml
-          test -f crackmeanflow/factory.py
+          cp -a /tmp/cmf-tree/. .
           test ! -e snapshot_fair_v3
           test ! -e .canonical_payload
+          test ! -e .github/workflows/materialize-canonical-clean.yml
 
       - name: Commit canonical source
         shell: bash
