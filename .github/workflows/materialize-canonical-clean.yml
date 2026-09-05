@@ -37,22 +37,26 @@ jobs:
           if len(target) != 999:
               raise SystemExit(f'unexpected {target_name} length={len(target)}')
           raw = ''.join(chunks)
-          insert_at = sum(map(len, chunks[:target_i])) + 499
+          target_start = sum(map(len, chunks[:target_i]))
           alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
           found = None
-          for c in alphabet:
-              candidate = raw[:insert_at] + c + raw[insert_at:]
-              try:
-                  decoded = base64.b64decode(candidate, validate=True)
-              except Exception:
-                  continue
-              if hashlib.sha256(decoded).hexdigest() == expected:
-                  found = (c, decoded)
+          for local_pos in range(len(target) + 1):
+              insert_at = target_start + local_pos
+              for c in alphabet:
+                  candidate = raw[:insert_at] + c + raw[insert_at:]
+                  try:
+                      decoded = base64.b64decode(candidate, validate=True)
+                  except Exception:
+                      continue
+                  if hashlib.sha256(decoded).hexdigest() == expected:
+                      found = (local_pos, c, decoded)
+                      break
+              if found is not None:
                   break
           if found is None:
-              raise SystemExit('unable to recover missing base64 character at validated split point')
-          print(f'recovered missing base64 character; archive sha256={expected}')
-          Path('/tmp/cmf.tar.xz').write_bytes(found[1])
+              raise SystemExit('unable to recover missing base64 character inside historical corrupt chunk')
+          print(f'recovered payload at local_pos={found[0]}; archive sha256={expected}')
+          Path('/tmp/cmf.tar.xz').write_bytes(found[2])
           PY
           rm -rf /tmp/cmf-tree
           mkdir -p /tmp/cmf-tree
