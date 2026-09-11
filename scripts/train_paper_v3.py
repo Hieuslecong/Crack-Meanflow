@@ -2,10 +2,9 @@ from __future__ import annotations
 
 """Locked launcher for paper-grade V3 training.
 
-This launcher never changes scientific settings. It verifies the canonical V3
-config file lock, binds the effective seed-specific semantic config plus source,
-protocol and dataset identities, writes a launch record, then delegates to the
-canonical ``train_journal.py`` research path.
+This launcher verifies the canonical V3 config lock, binds the effective
+seed-specific config plus source/protocol/dataset identities, writes a launch
+record, then delegates to the canonical ``train_journal.py`` research path.
 """
 
 import argparse
@@ -20,22 +19,11 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crackmeanflow.common import config_hash, file_sha256, protocol_bundle_hash, source_tree_hash
+from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers
 
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], stderr=subprocess.STDOUT, text=True).strip()
-
-
-def _blocking_worktree_entries() -> list[str]:
-    raw = _git("status", "--porcelain=v1", "--untracked-files=all")
-    allowed = ("reports/", "outputs/", "_data/")
-    blockers = []
-    for row in [x for x in raw.splitlines() if x.strip()]:
-        path = (row[3:] if len(row) >= 4 else row).strip().strip('"')
-        if row.startswith("?? ") and path.startswith(allowed):
-            continue
-        blockers.append(row)
-    return blockers
 
 
 def main():
@@ -51,7 +39,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
-    blockers = _blocking_worktree_entries()
+    blockers = paper_v3_worktree_blockers()
     if blockers:
         raise RuntimeError(f"paper V3 launch refused: dirty worktree {blockers}")
 
@@ -68,18 +56,23 @@ def main():
     preflight = json.loads(Path(args.preflight).read_text(encoding="utf-8"))
     if preflight.get("status") != "PASS":
         raise RuntimeError("V3 protocol preflight is not PASS")
+
     commit = _git("rev-parse", "HEAD")
     source_hash = source_tree_hash()
     protocol_file_hash = file_sha256(args.protocol)
-    bundle_hash = protocol_bundle_hash()
-    if preflight["provenance"]["commit"] != commit:
+    legacy_bundle_hash = protocol_bundle_hash()
+    active_bundle_hash = active_v3_bundle_hash(args.protocol, protocol)
+    prov = preflight["provenance"]
+    if prov["commit"] != commit:
         raise RuntimeError("preflight commit does not match current HEAD")
-    if preflight["provenance"]["source_tree_sha256"] != source_hash:
+    if prov["source_tree_sha256"] != source_hash:
         raise RuntimeError("preflight source tree does not match current source")
-    if preflight["provenance"]["protocol_file_sha256"] != protocol_file_hash:
+    if prov["protocol_file_sha256"] != protocol_file_hash:
         raise RuntimeError("preflight protocol file does not match current protocol")
-    if preflight["provenance"]["protocol_bundle_sha256"] != bundle_hash:
-        raise RuntimeError("preflight protocol bundle does not match current bundle")
+    if prov["protocol_bundle_sha256_legacy_global"] != legacy_bundle_hash:
+        raise RuntimeError("preflight legacy protocol bundle does not match current bundle")
+    if prov["protocol_bundle_sha256_v3_active"] != active_bundle_hash:
+        raise RuntimeError("preflight active V3 bundle does not match current V3 bundle")
 
     effective_cfg = json.loads(json.dumps(canonical_cfg))
     effective_cfg.setdefault("train", {})["seed"] = int(args.seed)
@@ -98,9 +91,12 @@ def main():
         "canonical_config_semantic_sha256": lock["semantic_sha256"],
         "effective_seeded_config_semantic_sha256": effective_hash,
         "protocol_file_sha256": protocol_file_hash,
-        "protocol_bundle_sha256": bundle_hash,
+        "protocol_bundle_sha256_legacy_global": legacy_bundle_hash,
+        "protocol_bundle_sha256_v3_active": active_bundle_hash,
         "source_tree_sha256": source_hash,
         "dataset_identity": preflight["dataset_identity"],
+        "gpu_driver": nvidia_driver_info(),
+        "paper_resume_policy": "epoch_boundary_only",
         "dry_run": bool(args.dry_run),
     }
     (out / "V3_LAUNCH_IDENTITY.json").write_text(json.dumps(launch, indent=2, sort_keys=True), encoding="utf-8")
@@ -118,7 +114,7 @@ def main():
         "--expected-protocol-path", args.protocol,
         "--expected-protocol-sha256", protocol_file_hash,
         "--expected-source-tree-sha256", source_hash,
-        "--expected-protocol-bundle-sha256", bundle_hash,
+        "--expected-protocol-bundle-sha256", legacy_bundle_hash,
         "--expected-split-id", protocol["source_dataset"]["split_id"],
         "--expected-source-identity-json", source_identity_json,
     ]
