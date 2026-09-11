@@ -1,7 +1,6 @@
 # Paper V3 Engineering Gate
 
-This runbook is the mandatory engineering/provenance gate before any new paper-grade full training.
-It intentionally does **not** modify the Conference/A2B/A5 scientific architecture or loss.
+This runbook is the mandatory engineering/provenance gate before any new paper-grade full training. The engineering branch deliberately keeps the current A5 scientific representation unchanged; Journal redesign happens only after this gate is clean.
 
 ## 0. Checkout and freeze
 
@@ -12,18 +11,16 @@ git pull --ff-only
 
 git branch --show-current
 git rev-parse HEAD
-git status --porcelain=v1
+git status --porcelain=v1 --untracked-files=all
 ```
 
-The tracked worktree must be clean before the preflight. Generated reports may be written after this check.
-
-Set the frozen CFD root:
+Source/config/script files must be clean. Generated untracked files under `reports/`, `outputs/`, and `_data/` are ignored by the V3 provenance gate.
 
 ```bash
 export DATA="_data/CFD_frozen_historical_v1"
 ```
 
-Do not inspect/tune on CFD TEST or OOD/GAPS during this gate.
+CFD TEST metrics and OOD/GAPS metrics remain closed during this engineering gate. TEST bytes may be hashed for provenance identity; they may not be used for tuning, thresholding, checkpoint selection, or metrics.
 
 ## 1. Static protocol/provenance gate
 
@@ -34,68 +31,105 @@ python scripts/protocol_preflight_v3.py \
   --out reports/PROTOCOL_PREFLIGHT_V3.json
 ```
 
-Required facts:
+Required locks:
 
 - train samples = 6606
 - effective batch = 8 for all primary arms
 - optimizer steps/epoch = 825
 - usable samples/epoch = 6600
 - omitted samples/epoch = 6
-- warmup updates = 8250
 - matched research horizon = 21000 updates
+- scheduler warmup = 8250 updates
 - NFE = 1
+- exact semantic + file hash for every V3 primary config
+- Conference curriculum is optimizer-step based and covers `[0, 21000)`
+- Conference endpoint stage is reachable for the final 5667 updates
 - content leakage audit passes
 
-## 2. Unit/regression contract
+### Warmup interpretation
+
+V3 intentionally retains the already-authorized V2 warmup of 8250 updates so curriculum repair and warmup are not changed simultaneously. Because 8250/21000 is 39.3%, this is **not** treated as an optimized choice. A preregistered warmup sensitivity experiment remains required before a strong final scientific claim.
+
+## 2. Unit/regression + scientific branch coverage
 
 ```bash
 python -m pytest -q tests/test_paper_v3_engineering_contract.py
+
+python scripts/branch_coverage_probe_v3.py \
+  --protocol configs/protocol/post_repair_protocol_v3.yaml \
+  --out reports/BRANCH_COVERAGE_V3.json
+
+python scripts/resume_equivalence_v3.py \
+  --out reports/RESUME_EQUIVALENCE_V3.json
 ```
 
-This test protects the V3 source-of-truth and prevents the diagnostic stop budget from being reused as the scheduler horizon.
+Branch coverage must prove:
 
-## 3. Level-2 real training smoke: no validation
+- Conference deployment endpoint branch is reachable;
+- Conference endpoint loss > 0 in the endpoint stage;
+- Conference thin loss > 0 in the endpoint stage;
+- A2B endpoint sampling is active;
+- A5 endpoint sampling is active;
+- A5 GIC sampling is active.
+
+The resume-equivalence probe checks 20 continuous steps against 10 + checkpoint/RNG restore + 10 on deterministic diagnostic state machinery. It does **not** authorize canonical partial-epoch paper resume. Canonical scientific resume remains epoch-boundary only.
+
+## 3. Level-2 real GPU training smoke — no validation
+
+Use the hardened wrapper, not `smoke_preflight_v3.py` directly.
 
 Conference:
 
 ```bash
-python scripts/smoke_preflight_v3.py \
+python scripts/smoke_gate_v3.py \
   --config configs/post_repair_v3/conference.yaml \
   --protocol configs/protocol/post_repair_protocol_v3.yaml \
   --data "$DATA" \
   --research-total-optimizer-steps 21000 \
   --diagnostic-stop-steps 20 \
   --validation-mode none \
-  --out reports/SMOKE_V3_CONFERENCE.json
+  --out reports/SMOKE_GATE_V3_CONFERENCE.json
 ```
 
 A2B:
 
 ```bash
-python scripts/smoke_preflight_v3.py \
+python scripts/smoke_gate_v3.py \
   --config configs/post_repair_v3/a2b_endpoint.yaml \
   --protocol configs/protocol/post_repair_protocol_v3.yaml \
   --data "$DATA" \
   --research-total-optimizer-steps 21000 \
   --diagnostic-stop-steps 20 \
   --validation-mode none \
-  --out reports/SMOKE_V3_A2B.json
+  --out reports/SMOKE_GATE_V3_A2B.json
 ```
 
-A5 current engineering candidate (scientific redesign not yet applied):
+A5 engineering candidate:
 
 ```bash
-python scripts/smoke_preflight_v3.py \
+python scripts/smoke_gate_v3.py \
   --config configs/post_repair_v3/a5_endpoint.yaml \
   --protocol configs/protocol/post_repair_protocol_v3.yaml \
   --data "$DATA" \
   --research-total-optimizer-steps 21000 \
   --diagnostic-stop-steps 20 \
   --validation-mode none \
-  --out reports/SMOKE_V3_A5.json
+  --out reports/SMOKE_GATE_V3_A5.json
 ```
 
-Each report must show:
+Every envelope must bind the same:
+
+```text
+branch
+commit
+source_tree_sha256
+protocol_file_sha256
+protocol_bundle_sha256
+config_file_sha256
+config_semantic_sha256
+```
+
+and the raw smoke must report:
 
 ```text
 diagnostic_only = true
@@ -107,30 +141,54 @@ completed_optimizer_steps = 20
 checkpoint_roundtrip.pass = true
 ```
 
-No `RUN_COMPLETE.json`, `best.pt`, or `last.pt` is produced by this diagnostic runner.
+No paper-completion checkpoint is emitted by the diagnostic smoke.
 
-## 4. Level-3 bounded validation smoke
+## 4. Level-3 bounded validation — mandatory for all three paths
 
-Run bounded source-validation only after Level-2 passes. Conference is the minimum gate; repeat for A2B/A5 if their validation path differs.
+Conference:
 
 ```bash
-python scripts/smoke_preflight_v3.py \
+python scripts/smoke_gate_v3.py \
   --config configs/post_repair_v3/conference.yaml \
   --protocol configs/protocol/post_repair_protocol_v3.yaml \
-  --data "$DATA" \
-  --research-total-optimizer-steps 21000 \
-  --diagnostic-stop-steps 20 \
-  --validation-mode bounded \
-  --validation-max-batches 4 \
-  --validation-seed 0 \
-  --out reports/PIPELINE_SMOKE_V3_CONFERENCE.json
+  --data "$DATA" --diagnostic-stop-steps 20 \
+  --validation-mode bounded --validation-max-batches 4 --validation-seed 0 \
+  --out reports/PIPELINE_GATE_V3_CONFERENCE.json
 ```
 
-The bounded validation metric is diagnostic only and must never be copied into a paper table.
+A2B:
 
-## 5. Review telemetry
+```bash
+python scripts/smoke_gate_v3.py \
+  --config configs/post_repair_v3/a2b_endpoint.yaml \
+  --protocol configs/protocol/post_repair_protocol_v3.yaml \
+  --data "$DATA" --diagnostic-stop-steps 20 \
+  --validation-mode bounded --validation-max-batches 4 --validation-seed 0 \
+  --out reports/PIPELINE_GATE_V3_A2B.json
+```
 
-For each smoke report inspect:
+A5:
+
+```bash
+python scripts/smoke_gate_v3.py \
+  --config configs/post_repair_v3/a5_endpoint.yaml \
+  --protocol configs/protocol/post_repair_protocol_v3.yaml \
+  --data "$DATA" --diagnostic-stop-steps 20 \
+  --validation-mode bounded --validation-max-batches 4 --validation-seed 0 \
+  --out reports/PIPELINE_GATE_V3_A5.json
+```
+
+These bounded metrics are diagnostic only and must never be copied into a paper table.
+
+## 5. GPU/environment evidence
+
+Capture alongside the JSON reports:
+
+```bash
+nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+```
+
+Review each raw smoke under `raw_smoke` for:
 
 ```text
 timings.data_wait_seconds
@@ -147,40 +205,45 @@ cuda_memory.peak_reserved_bytes
 cuda_memory.total_device_bytes
 ```
 
-Do not interpret `peak_reserved_bytes / total_device_bytes > 0.90` alone as an OOM failure. Check actual allocation and whether the real canonical microbatch completes.
+Do not interpret reserved/total > 0.90 by itself as an OOM failure. Canonical microbatch completion and live allocation matter more than allocator reservation.
 
 ## 6. GO / NO-GO
 
-`FULL_TRAINING_READY = TRUE` only when all of the following are true:
+`FULL_TRAINING_READY = TRUE` only when all are true:
 
 ```text
 protocol preflight PASS
-V3 regression test PASS
-Conference 20-step smoke PASS
-A2B 20-step smoke PASS
-A5 20-step smoke PASS
-bounded validation PASS
-finite loss and gradient PASS
+semantic/file config locks PASS
+V3 regression tests PASS
+scientific branch coverage PASS
+diagnostic resume-equivalence PASS
+Conference 20-step GPU smoke PASS
+A2B 20-step GPU smoke PASS
+A5 20-step GPU smoke PASS
+Conference bounded validation PASS
+A2B bounded validation PASS
+A5 bounded validation PASS
+finite loss/gradients PASS
 parameter update PASS
 optimizer/scheduler/EMA PASS
 checkpoint serialization roundtrip PASS
 no CUDA OOM
 scheduler horizon = 21000
 warmup horizon = 8250
-CFD TEST remains closed
-OOD/GAPS remains closed
+Conference endpoint stage reachable before step 21000
+CFD TEST metrics remain closed
+OOD/GAPS metrics remain closed
 ```
 
-A true 10+10 resume-vs-20-continuous equivalence test remains a separate P1 gate before a paper-grade full run. The current smoke runner checks checkpoint serialization/reload integrity but does not claim full trajectory-equivalent resume validation.
+Even after this gate, warmup sensitivity is a **scientific experiment**, not an engineering blocker for running the locked V3 reference recipe. If sensitivity materially changes conclusions, the final scientific protocol must be versioned again before headline runs.
 
 ## 7. Scientific separation after engineering PASS
 
-Do not modify the current A5 architecture on this branch.
+Do not redesign current A5 on this branch. After P0/P1 are clean:
 
-After P0/P1 are clean:
-
-1. Freeze the Conference method and run the planned Conference experiments.
-2. Create a separate Journal research branch.
-3. Compare direct-mask iMF vs EDT-state vs causal centerline-radius state.
-4. Add geometry-projected flow-map consistency only after the causal state itself is validated.
-5. Reject the Journal hypothesis if topology/width metrics do not improve under controlled ablation.
+1. freeze the Conference reference method;
+2. run Conference scientific comparisons under the locked recipe;
+3. create a separate Journal research branch;
+4. compare direct-mask iMF vs EDT-state vs causal centerline-radius state;
+5. add geometry-projected flow-map consistency only after causal state itself is validated;
+6. reject the Journal hypothesis if topology/width metrics do not improve under controlled ablation.
