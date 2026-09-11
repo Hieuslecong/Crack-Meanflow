@@ -25,30 +25,11 @@ from crackmeanflow.common import (
     source_tree_hash,
 )
 from crackmeanflow.common.training_protocol import training_split_view
+from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers
 
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], stderr=subprocess.STDOUT, text=True).strip()
-
-
-def _worktree_status() -> tuple[bool, dict]:
-    raw = _git("status", "--porcelain=v1", "--untracked-files=all")
-    rows = [line for line in raw.splitlines() if line.strip()]
-    allowed_prefixes = ("reports/", "outputs/", "_data/")
-    blocking = []
-    ignored_generated = []
-    for row in rows:
-        path = row[3:] if len(row) >= 4 else row
-        path = path.strip().strip('"')
-        if row.startswith("?? ") and path.startswith(allowed_prefixes):
-            ignored_generated.append(row)
-        else:
-            blocking.append(row)
-    return len(blocking) == 0, {
-        "blocking_entries": blocking,
-        "ignored_generated_entries": ignored_generated,
-        "raw_status_entries": rows,
-    }
 
 
 def _assert_conference_curriculum(cfg: dict, protocol: dict) -> dict:
@@ -83,18 +64,21 @@ def main() -> None:
     if protocol.get("protocol_version") != "CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V3":
         raise RuntimeError("wrong protocol version")
 
-    clean, clean_detail = _worktree_status()
+    blockers = paper_v3_worktree_blockers()
+    clean = not blockers
     if not clean and not args.allow_dirty:
-        raise RuntimeError(f"paper-v3 worktree is not provenance-clean: {clean_detail['blocking_entries']}")
+        raise RuntimeError(f"paper-v3 worktree is not provenance-clean: {blockers}")
 
     provenance = {
         "branch": _git("branch", "--show-current"),
         "commit": _git("rev-parse", "HEAD"),
         "worktree_clean_for_paper_v3": clean,
-        "worktree_detail": clean_detail,
+        "worktree_blockers": blockers,
         "source_tree_sha256": source_tree_hash(),
-        "protocol_bundle_sha256": protocol_bundle_hash(),
+        "protocol_bundle_sha256_legacy_global": protocol_bundle_hash(),
+        "protocol_bundle_sha256_v3_active": active_v3_bundle_hash(args.protocol, protocol),
         "protocol_file_sha256": file_sha256(args.protocol),
+        "gpu_driver": nvidia_driver_info(),
     }
 
     expected_train = int(protocol["source_dataset"]["expected_train_samples"])
@@ -157,9 +141,7 @@ def main() -> None:
             "checkpoint_selection_seeds": [int(x) for x in cfg.get("eval", {}).get("checkpoint_selection_seeds", [])] == [int(x) for x in protocol["validation"]["checkpoint_selection_seeds"]],
             "final_threshold_calibration_seeds": [int(x) for x in cfg.get("eval", {}).get("final_threshold_calibration_seeds", [])] == [int(x) for x in protocol["validation"]["final_threshold_calibration_seeds"]],
         }
-        curriculum_checks = None
-        if arm == "Conference":
-            curriculum_checks = _assert_conference_curriculum(cfg, protocol)
+        curriculum_checks = _assert_conference_curriculum(cfg, protocol) if arm == "Conference" else None
         if not all(checks.values()):
             raise RuntimeError(f"Paper-V3 protocol mismatch for {arm}: {checks}")
         arms[arm] = {
