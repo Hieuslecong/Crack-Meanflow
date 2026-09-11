@@ -60,7 +60,10 @@ checkpoint_selection:
   metric: pixel_micro_f1
   target_data_used: false
   validation_interval_epochs: 5
-  validation_interval_optimizer_steps_on_cfd: 1050
+  # Local execution is aligned to the prepared CFD split.  The effective
+  # batch is eight and the observed train split has 825 optimizer updates per
+  # complete epoch, so five complete epochs are 4125 updates (not 1050).
+  validation_interval_optimizer_steps_on_cfd: 4125
   eval_batch_size: 2
 final_threshold_lock:
   source_validation_only: true
@@ -82,8 +85,24 @@ statistics:
   preferred_training_seeds: 5
   ci: student_t_95
   cfd_parent_group_bootstrap: true
+  paired_seed_comparisons:
+  - A5_ENDPOINT minus Conference
+  - A5_ENDPOINT minus A2B_ENDPOINT
+  primary_target_metrics:
+  - pixel_micro_f1
+  - pixel_micro_iou
+  - precision_recall_balance
+  source_to_target_gap_is_secondary: true
 fairness:
-  matched_optimizer_steps: 21000
+  # Split-aligned local budgets: 5/10/20/100 complete epochs.
+  matched_optimizer_steps: 82500
+  local_steps_per_epoch_observed: 825
+  local_screen_optimizer_steps:
+  - 4125
+  - 8250
+  - 16500
+  local_full_optimizer_steps: 82500
+  local_budget_interpretation: split_aligned_complete_epochs
   primary_label: matched_optimizer_budget
   common_optimizer_recipe_sensitivity_required: true
   uniform_crop_is_canonical: true
@@ -92,6 +111,10 @@ domain_roles:
   GAPS384: development_ood_if_used_for_method_design
   OmniCrack: development_ood_if_used_for_method_design
   final_untouched_ood: must_be_frozen_before_final_claim
+development_ood_policy:
+  metric_access_logging_required: true
+  after_first_peek_not_untouched: true
+  target_metrics_may_not_select_checkpoint_threshold_seed_or_design: true
 release:
   conference_unet_redistribution_rights_required_before_public_push: true
 ablation_ladder:

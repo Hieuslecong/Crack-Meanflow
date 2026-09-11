@@ -1,0 +1,46 @@
+schema: CRACKMEANFLOW_V1_V2_EXPERIMENT_MATRIX_V1
+description: >-
+  Preregistered paired V1/V2 CFD comparison. This file expands to queue rows
+  only; it never opens CFD TEST or GAPS384 and never starts a GPU process.
+source:
+  dataset_name: CFD
+  dataset_version: frozen-historical-v1
+  split_id: CFD_FROZEN_HISTORICAL_V1
+  dataset_identity:
+    train:
+      count: 6606
+      name_manifest_sha256: f9fe72024f0db9a234215a7504bf360f9e631a16b742d1c2bf0c22d23b7de713
+      content_manifest_sha256: a492deb23122594631dd346fcc05348e26234f748f60edf7205c21b25ddf27b4
+    val:
+      count: 1447
+      name_manifest_sha256: db11fd5002c9cb02e73a82f581ba4aca427215c18ee04bc1f1e889009fbe9aaf
+      content_manifest_sha256: 005e334bca6aa2ef3782147af97adf9c50892f1037c9d767e5b6226823760b61
+    test:
+      count: 1384
+      name_manifest_sha256: 85f21d1e98ac1335bb1a048bdcdcec686dccba928ee9b5e3b484fbaae0afd680
+      content_manifest_sha256: 333819fe508c8be23f34354566c588cd5fd23108a1cf101efbbdf5c968b1dbda
+variant_protocols:
+  V1: configs/protocol/paper_protocol.yaml
+  V2: configs/protocol/post_repair_protocol_v2.yaml
+seeds: [0, 1, 2]
+arms:
+  Conference:
+    v1_config: configs/conference/crackmeanflow_unet.yaml
+    v2_config: configs/post_repair_v2/conference.yaml
+  A2B_ENDPOINT:
+    v1_config: configs/journal/a2b_hybrid_imf_mask_capacity_matched.yaml
+    v2_config: configs/post_repair_v2/a2b_endpoint.yaml
+  A5_ENDPOINT:
+    v1_config: configs/journal/a5_geocrack_imf_endpoint_candidate.yaml
+    v2_config: configs/post_repair_v2/a5_endpoint.yaml
+lanes:
+  matched_optimizer_steps:
+    budget_protocol: MATCHED_OPTIMIZER_STEPS
+    planned_optimizer_steps:
+      V1: 21000
+      V2: 21000
+  practical_protocol:
+    budget_protocol: HISTORICAL_V1_VS_POST_REPAIR_V2
+    planned_optimizer_steps:
+      V1: null
+      V2: 21000

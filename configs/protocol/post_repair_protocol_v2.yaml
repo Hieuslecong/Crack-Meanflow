@@ -1,0 +1,33 @@
+protocol_version: CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V2
+supersedes_for_current_repair: CRACKMEANFLOW_PAPER_PROTOCOL_V1_LOCAL_82500_VARIANT
+reason: >-
+  The local 82,500-update variant conflicts with the authorized 21,000-update
+  repair protocol. V2 also makes the compared primary arms share one explicit
+  ten-epoch warmup; it is a protocol change, not a model-specific adjustment.
+source_dataset: CFD
+split_id: CFD_FROZEN_HISTORICAL_V1
+primary_arms:
+  Conference: configs/post_repair_v2/conference.yaml
+  A2B_ENDPOINT: configs/post_repair_v2/a2b_endpoint.yaml
+  A5_ENDPOINT: configs/post_repair_v2/a5_endpoint.yaml
+scheduler:
+  scheduler: warmup_cosine_per_optimizer_update
+  total_optimizer_steps: 21000
+  steps_per_epoch: 825
+  warmup_epochs: 10
+  warmup_steps: 8250
+  post_warmup_steps: 12750
+  cosine_start_step: 8250
+  cosine_end_step: 21000
+  minimum_lr_multiplier: 0.0
+  stepping_frequency: optimizer_update
+fast_screen:
+  optimizer_steps: 12375
+  post_warmup_steps: 4125
+  classification: VALID_POSTWARMUP_SEED0_SCREEN
+runtime_policy:
+  Conference: {batch_size: 4, grad_accum_steps: 2}
+  A2B_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
+  A5_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
+CFD_test_policy: closed_during_development
+GAPS_role: closed_until_FIX_GATE_PASS_then_DEVELOPMENT_OOD

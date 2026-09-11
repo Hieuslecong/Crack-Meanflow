@@ -6,10 +6,11 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from crackmeanflow.common import (
     PairedCrackDataset,discover_required_splits,audit_group_integrity,
     calibrate_threshold_on_validation,make_warmup_cosine_scheduler,optimizer_steps_per_epoch,
-    save_checkpoint_atomic,load_checkpoint,restore_rng_state,config_hash,source_tree_hash,protocol_bundle_hash,environment_info,EMA,
+    save_checkpoint_atomic,load_checkpoint,restore_rng_state,config_hash,source_tree_hash,protocol_bundle_hash,environment_info,file_sha256,write_immutable_json,EMA,
     discover_normal_images,append_normal_negatives,source_balancing_weights,EpochRandomSampler,EpochWeightedRandomSampler,
     build_dataset_identity,write_split_manifest,verify_source_dataset_contract,resolve_thresholds,source_splits_for_config,audit_content_split_integrity,
 )
+from crackmeanflow.common.training_protocol import runtime_policy_status,resume_taint_state,training_split_view,validate_execution_identity
 from crackmeanflow.adapter import CrackMeanFlowModel
 from crackmeanflow.sit import build_sit
 from crackmeanflow.sampler import crack_meanflow_sampler
@@ -105,8 +106,20 @@ def _select_checkpoint_metric(cfg,model,loader,device,rasterizer):
     return {'f1':mean_f1[th],'per_seed_f1':[float(sw[th]['f1']) for sw in sweeps],'selection_seeds':seeds},float(th)
 
 def main():
-    ap=argparse.ArgumentParser();ap.add_argument('--config',required=True);ap.add_argument('--data',required=True);ap.add_argument('--dataset-name',default='CFD');ap.add_argument('--dataset-version',required=True);ap.add_argument('--out',default=None);ap.add_argument('--resume',default=None);ap.add_argument('--allow-config-change',action='store_true');ap.add_argument('--group-regex',default=None);ap.add_argument('--max-optimizer-steps',type=int,default=None,help='exact matched-budget stop; recorded into effective config');ap.add_argument('--seed',type=int,default=None,help='override training seed; recorded into EFFECTIVE_CONFIG.yaml');a=ap.parse_args()
+    ap=argparse.ArgumentParser();ap.add_argument('--config',required=True);ap.add_argument('--data',required=True);ap.add_argument('--dataset-name',default='CFD');ap.add_argument('--dataset-version',required=True);ap.add_argument('--out',default=None);ap.add_argument('--resume',default=None);ap.add_argument('--allow-config-change',action='store_true');ap.add_argument('--group-regex',default=None);ap.add_argument('--max-optimizer-steps',type=int,default=None,help='exact matched-budget stop; recorded into effective config');ap.add_argument('--seed',type=int,default=None,help='override training seed; recorded into EFFECTIVE_CONFIG.yaml');ap.add_argument('--runtime-batch-size',type=int,default=None,help='runtime-only microbatch override; must be paired with --runtime-grad-accum-steps and preserve the configured effective batch');ap.add_argument('--runtime-grad-accum-steps',type=int,default=None,help='runtime-only accumulation override paired with --runtime-batch-size; recorded in EFFECTIVE_CONFIG.yaml');ap.add_argument('--expected-config-sha256');ap.add_argument('--expected-config-file-sha256');ap.add_argument('--expected-protocol-path');ap.add_argument('--expected-protocol-sha256');ap.add_argument('--expected-source-tree-sha256');ap.add_argument('--expected-protocol-bundle-sha256');ap.add_argument('--expected-split-id');ap.add_argument('--expected-source-identity-json');a=ap.parse_args()
+    run_started=time.time()
     cfg=yaml.safe_load(open(a.config));
+    original_batch=int(cfg.get('train',{}).get('batch_size',0));original_accum=int(cfg.get('train',{}).get('grad_accum_steps',0))
+    if (a.runtime_batch_size is None)!=(a.runtime_grad_accum_steps is None):
+        raise ValueError('--runtime-batch-size and --runtime-grad-accum-steps must be provided together')
+    if a.runtime_batch_size is not None:
+        if a.runtime_batch_size<1 or a.runtime_grad_accum_steps<1:
+            raise ValueError('runtime batch and accumulation must be positive')
+        if int(a.runtime_batch_size)*int(a.runtime_grad_accum_steps)!=original_batch*original_accum:
+            raise ValueError('runtime microbatch override must preserve the configured effective batch size')
+        cfg.setdefault('train',{})['batch_size']=int(a.runtime_batch_size)
+        cfg['train']['grad_accum_steps']=int(a.runtime_grad_accum_steps)
+        cfg['train']['runtime_batch_override']={'original_batch_size':original_batch,'original_grad_accum_steps':original_accum,'effective_batch_size_preserved':True,'reason':'runtime diagnostics only: microbatch partition can change the objective even when effective batch is preserved'}
     if a.max_optimizer_steps is not None:
         if a.max_optimizer_steps<1: raise ValueError('--max-optimizer-steps must be >=1')
         cfg.setdefault('train',{})['max_optimizer_steps']=int(a.max_optimizer_steps)
@@ -115,26 +128,39 @@ def main():
     if a.group_regex is not None:
         cfg.setdefault('train',{})['parent_group_regex']=str(a.group_regex)
     if not str(a.dataset_name).strip() or not str(a.dataset_version).strip(): raise ValueError('dataset name/version must be non-empty provenance labels')
+    if a.expected_config_file_sha256 and file_sha256(a.config)!=a.expected_config_file_sha256: raise RuntimeError('queue-bound config file hash mismatch')
+    if a.expected_protocol_path:
+        if not os.path.isfile(a.expected_protocol_path): raise RuntimeError('queue-bound protocol path is missing')
+        if a.expected_protocol_sha256 and file_sha256(a.expected_protocol_path)!=a.expected_protocol_sha256: raise RuntimeError('queue-bound protocol file hash mismatch')
+    validate_execution_identity(expected_config_hash=a.expected_config_sha256,actual_config_hash=config_hash(cfg),expected_source_tree_hash=a.expected_source_tree_sha256,actual_source_tree_hash=source_tree_hash(),expected_protocol_bundle_hash=a.expected_protocol_bundle_sha256,actual_protocol_bundle_hash=protocol_bundle_hash())
     track=cfg.get('track')
     if track not in {'conference','journal','journal_ablation'}:raise RuntimeError(f'invalid track={track!r}')
     if int(cfg.get('eval',{}).get('num_steps',1))!=1:raise RuntimeError('headline/research training configs must declare eval.num_steps=1')
     if cfg['train'].get('resize_policy','stretch_square')!='stretch_square': raise RuntimeError('only resize_policy=stretch_square is implemented in the canonical pipeline; use diagnostics for alternatives')
+    runtime_policy=runtime_policy_status(cfg['experiment'],cfg['train']['batch_size'],cfg['train']['grad_accum_steps'])
+    cfg['train']['runtime_policy']=runtime_policy
     seed=cfg['train'].get('seed',42);seed_all(seed,cfg['train'].get('deterministic',False),cfg['train'].get('deterministic_warn_only',False));device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     base_sp=discover_required_splits(a.data);group_status='UNVERIFIED';group_regex=a.group_regex or cfg['train'].get('parent_group_regex')
     if group_regex:audit_group_integrity(base_sp,_group_fn(group_regex));group_status='PASS'
-    sp=source_splits_for_config(a.data,cfg);content_leakage_audit=audit_content_split_integrity(sp);identities=build_dataset_identity(sp,include_rows=False);name_hashes={k:v['name_manifest_sha256'] for k,v in identities.items()};content_hashes={k:v['content_manifest_sha256'] for k,v in identities.items()}
+    sp=source_splits_for_config(a.data,cfg);training_sp=training_split_view(sp);content_leakage_audit=audit_content_split_integrity(sp);identities=build_dataset_identity(sp,include_rows=False)
+    if a.expected_split_id and a.expected_split_id != 'CFD_FROZEN_HISTORICAL_V1': raise RuntimeError(f'queue-bound split identity mismatch: {a.expected_split_id}')
+    if a.expected_source_identity_json:
+        try: expected_identity=json.loads(a.expected_source_identity_json)
+        except json.JSONDecodeError as exc: raise RuntimeError('queue-bound source identity JSON is invalid') from exc
+        if expected_identity != identities: raise RuntimeError('queue-bound source dataset identity mismatch')
+    name_hashes={k:v['name_manifest_sha256'] for k,v in identities.items()};content_hashes={k:v['content_manifest_sha256'] for k,v in identities.items()}
     source_provenance={'dataset_name':a.dataset_name,'dataset_version':a.dataset_version,'splits':identities,'parent_group_audit':group_status,'group_regex':group_regex,'content_leakage_audit':content_leakage_audit}
-    out=a.out or os.path.join('outputs',cfg['experiment']);os.makedirs(out,exist_ok=True);yaml.safe_dump(cfg,open(os.path.join(out,'EFFECTIVE_CONFIG.yaml'),'w'),sort_keys=False);write_split_manifest(sp,os.path.join(out,'dataset_manifest.json'),include_content_rows=True)
-    base=lambda s,aug:PairedCrackDataset(sp[s],cfg['model']['img_size'],aug,aug and cfg['train'].get('photometric_augment',False),cfg['train'].get('mask_resize_mode','nearest'),cfg['train'].get('mask_binarization','auto_binary_safe'))
+    out=a.out or os.path.join('outputs',cfg['experiment'])
+    base=lambda s,aug:PairedCrackDataset(training_sp[s],cfg['model']['img_size'],aug,aug and cfg['train'].get('photometric_augment',False),cfg['train'].get('mask_resize_mode','nearest'),cfg['train'].get('mask_binarization','auto_binary_safe'))
     if cfg['backbone']=='geocrack_imf':train_ds=GeometryDataset(base('train',True),cfg['model'].get('max_radius',16),cfg['model'].get('representation','centerline_radius'),cfg['model'].get('distance_encoding','linear'));val_ds=GeometryDataset(base('val',False),cfg['model'].get('max_radius',16),cfg['model'].get('representation','centerline_radius'),cfg['model'].get('distance_encoding','linear'))
     else:train_ds=base('train',True);val_ds=base('val',False)
-    tr=_train_loader(train_ds,sp['train'],cfg,seed);va=DataLoader(val_ds,batch_size=int(cfg.get('eval',{}).get('batch_size',1)),shuffle=False,num_workers=cfg['train'].get('num_workers',0))
+    tr=_train_loader(train_ds,training_sp['train'],cfg,seed);va=DataLoader(val_ds,batch_size=int(cfg.get('eval',{}).get('batch_size',1)),shuffle=False,num_workers=cfg['train'].get('num_workers',0))
     if len(tr)==0:raise RuntimeError('training loader is empty; reduce batch_size or disable drop_last')
     if bool(cfg['train'].get('drop_incomplete_accumulation',True)) and len(tr)<int(cfg['train']['grad_accum_steps']):raise RuntimeError('training loader has fewer batches than grad_accum_steps under drop_incomplete_accumulation=true')
     model,rast,lossfn=build_track(cfg,device);opt=torch.optim.AdamW(model.parameters(),lr=cfg['train']['lr'],weight_decay=cfg['train']['weight_decay']);drop_incomplete_accum=bool(cfg['train'].get('drop_incomplete_accumulation',True));steps=optimizer_steps_per_epoch(len(tr),cfg['train']['grad_accum_steps'],drop_incomplete_accum);max_steps=cfg['train'].get('max_optimizer_steps');planned_steps=min(int(steps)*int(cfg['train']['epochs']),int(max_steps)) if max_steps is not None else int(steps)*int(cfg['train']['epochs']);sched=make_warmup_cosine_scheduler(opt,cfg['train']['epochs'],steps,cfg['train'].get('warmup_epochs',0),total_optimizer_steps=planned_steps);ema=EMA(model,cfg['train']['ema_decay'])
     nominal_b=int(cfg['train']['batch_size']);ga=int(cfg['train']['grad_accum_steps']);loader_samples=min(len(train_ds),len(tr)*nominal_b) if cfg['train'].get('drop_last',True) else len(train_ds);usable_samples=int(steps)*nominal_b*ga if drop_incomplete_accum else loader_samples
     fairness={'samples_train':len(train_ds),'batch_size':nominal_b,'grad_accum_steps':ga,'effective_batch_size_nominal':nominal_b*ga,'optimizer_steps_per_epoch':int(steps),'planned_epochs':int(cfg['train']['epochs']),'planned_optimizer_steps':planned_steps,'max_optimizer_steps':int(max_steps) if max_steps is not None else None,'budget_protocol':'MATCHED_OPTIMIZER_STEPS' if max_steps is not None else 'BEST_ACHIEVABLE_EPOCHS','nfe':1,'drop_incomplete_accumulation':drop_incomplete_accum,'dropped_microbatches_per_epoch':(len(tr)%ga) if drop_incomplete_accum else 0,'loader_samples_per_epoch':int(loader_samples),'usable_samples_per_epoch':int(usable_samples),'total_omitted_samples_per_epoch':int(max(0,len(train_ds)-usable_samples)),'sample_coverage_fraction_per_epoch':float(usable_samples/max(len(train_ds),1)),'effective_samples_per_full_optimizer_step':nominal_b*ga,'optimizer_recipe':{'lr':float(cfg['train']['lr']),'weight_decay':float(cfg['train']['weight_decay']),'warmup_epochs':int(cfg['train'].get('warmup_epochs',0)),'warmup_optimizer_steps':int(cfg['train'].get('warmup_epochs',0))*int(steps)},'sampling_protocol':cfg['train'].get('sample_balance') or cfg['train'].get('source_balance') or {'enabled':False},'deterministic_requested':bool(cfg['train'].get('deterministic',False)),'checkpoint_selection_seeds':[int(x) for x in cfg.get('eval',{}).get('checkpoint_selection_seeds',[])],'checkpoint_validation_interval_epochs':int(cfg.get('eval',{}).get('checkpoint_validation_interval_epochs',1)),'eval_batch_size':int(cfg.get('eval',{}).get('batch_size',1))}
-    best=-1.;best_th=None;gs=0;hist=[];start_epoch=0;global_sample_offset=0;resume_config_mismatch=False
+    best=-1.;best_th=None;gs=0;hist=[];start_epoch=0;global_sample_offset=0;resume_taint={'resume_config_mismatch_current':False,'resume_config_mismatch_inherited':False,'resume_config_mismatch':False}
     if a.resume:
         resume_meta=torch.load(a.resume,map_location='cpu',weights_only=False)
         verify_source_dataset_contract(resume_meta,sp,a.dataset_name,a.dataset_version,keys=('train','val','test'))
@@ -146,14 +172,18 @@ def main():
         if not saved_protocol: raise RuntimeError('resume checkpoint has no protocol_bundle_sha256; scientific protocol provenance is insufficient')
         if saved_protocol!=current_protocol: raise RuntimeError(f'resume protocol-bundle mismatch: checkpoint={saved_protocol} current={current_protocol}; start a new run under the new protocol')
         ck=load_checkpoint(a.resume,model,opt,sched,map_location='cpu')
-        resume_config_mismatch=bool(ck.get('config_hash') and ck['config_hash']!=config_hash(cfg))
-        if resume_config_mismatch and not a.allow_config_change:raise RuntimeError('resume config differs from checkpoint')
+        current_resume_config_mismatch=bool(ck.get('config_hash') and ck['config_hash']!=config_hash(cfg))
+        if current_resume_config_mismatch and not a.allow_config_change:raise RuntimeError('resume config differs from checkpoint')
+        resume_taint=resume_taint_state(ck,current_resume_config_mismatch)
         extra=ck.get('extra_state') or {}
         if extra.get('epoch_complete') is False:
             raise RuntimeError('scientific resume from a partial-epoch budget checkpoint is prohibited; start a new run or choose a budget aligned to full optimizer-accumulation epochs')
         ema=EMA(model,cfg['train']['ema_decay'],ck.get('ema'));best=float(ck.get('best_val_metric',-1));_saved_best_th=ck.get('best_val_threshold');best_th=None if _saved_best_th is None else float(_saved_best_th);gs=int(ck.get('global_optimizer_step',0));start_epoch=int(ck['epoch'])+1;global_sample_offset=int(extra.get('global_sample_offset',0));restore_rng_state(ck.get('rng_state'));hp=os.path.join(out,'history.json')
         if os.path.isfile(hp):hist=json.load(open(hp)).get('history',[])
-    json.dump({'source_provenance':source_provenance,'fairness':fairness,'config_hash':config_hash(cfg),'resume_requested':bool(a.resume),'resume_config_mismatch':resume_config_mismatch,'source_tree_sha256':source_tree_hash(),'protocol_bundle_sha256':protocol_bundle_hash(),'environment':environment_info(),'scientific_validity':'TAINTED_RESUME_CONFIG_CHANGE' if resume_config_mismatch else 'VALID_CONFIG'},open(os.path.join(out,'RUN_IDENTITY.json'),'w'),indent=2)
+    os.makedirs(out,exist_ok=True)
+    yaml.safe_dump(cfg,open(os.path.join(out,'EFFECTIVE_CONFIG.yaml'),'w'),sort_keys=False)
+    write_split_manifest(sp,os.path.join(out,'dataset_manifest.json'),include_content_rows=True)
+    json.dump({'source_provenance':source_provenance,'fairness':fairness,'runtime_policy':runtime_policy,'config_hash':config_hash(cfg),'resume_requested':bool(a.resume),**resume_taint,'source_tree_sha256':source_tree_hash(),'protocol_bundle_sha256':protocol_bundle_hash(),'environment':environment_info(),'scientific_validity':'TAINTED_RESUME_CONFIG_CHANGE' if resume_taint['resume_config_mismatch'] else 'VALID_CONFIG'},open(os.path.join(out,'RUN_IDENTITY.json'),'w'),indent=2)
     json.dump(environment_info(),open(os.path.join(out,'ENVIRONMENT.json'),'w'),indent=2)
     for ep in range(start_epoch,cfg['train']['epochs']):
         if gs>=planned_steps: break
@@ -184,12 +214,27 @@ def main():
             if not np.isfinite(score): raise FloatingPointError(f'non-finite source-validation F1 at epoch={ep}: {score}')
             improved=score>best
             if improved:best=score;best_th=float(th)
-        row={'epoch':ep,'loss':float(np.mean(ls)),'val_f1':score,'val_threshold':None if th is None else float(th),'val_checkpoint_selection_seeds':None if ev is None else ev['selection_seeds'],'val_f1_per_inference_seed':None if ev is None else ev['per_seed_f1'],'validation_performed':bool(should_validate),'validation_interval_epochs':val_interval,'optimizer_step':gs,'lr':opt.param_groups[0]['lr'],'seconds':time.time()-t0,'seen_samples':seen_samples,'seen_batches':seen_batches,'fm_samples':fm_samples,'fm_fraction':fm_samples/max(seen_samples,1),'gic_active_samples':gic_active_samples,'gic_active_batches':gic_active_batches,'gic_sample_fraction':gic_active_samples/max(seen_samples,1),'gic_batch_fraction':gic_active_batches/max(seen_batches,1),'near_deployment_samples':near_deploy,'near_deployment_fraction':near_deploy/max(seen_samples,1),'exact_deployment_samples':exact_deploy,'exact_deployment_fraction':exact_deploy/max(seen_samples,1),'nfe':1,'resume_config_mismatch':resume_config_mismatch};hist.append(row);print(row)
+        row={'epoch':ep,'loss':float(np.mean(ls)),'val_f1':score,'val_threshold':None if th is None else float(th),'val_checkpoint_selection_seeds':None if ev is None else ev['selection_seeds'],'val_f1_per_inference_seed':None if ev is None else ev['per_seed_f1'],'validation_performed':bool(should_validate),'validation_interval_epochs':val_interval,'optimizer_step':gs,'lr':opt.param_groups[0]['lr'],'seconds':time.time()-t0,'seen_samples':seen_samples,'seen_batches':seen_batches,'fm_samples':fm_samples,'fm_fraction':fm_samples/max(seen_samples,1),'gic_active_samples':gic_active_samples,'gic_active_batches':gic_active_batches,'gic_sample_fraction':gic_active_samples/max(seen_samples,1),'gic_batch_fraction':gic_active_batches/max(seen_batches,1),'near_deployment_samples':near_deploy,'near_deployment_fraction':near_deploy/max(seen_samples,1),'exact_deployment_samples':exact_deploy,'exact_deployment_fraction':exact_deploy/max(seen_samples,1),'nfe':1,**resume_taint};hist.append(row);print(row)
         usable_batches=steps*int(cfg['train']['grad_accum_steps']) if drop_incomplete_accum else len(tr)
         epoch_complete=(last_batch_index+1)>=usable_batches
-        common=dict(model=model,ema=ema,optimizer=opt,scheduler=sched,epoch=ep,global_optimizer_step=gs,cfg=cfg,best_val_metric=best,best_val_threshold=best_th,split_manifest_hashes=name_hashes,split_manifest_content_hashes=content_hashes,source_provenance=source_provenance,seed=seed,extra_state={'global_sample_offset':global_sample_offset,'fairness':fairness,'resume_config_mismatch':resume_config_mismatch,'epoch_complete':bool(epoch_complete),'processed_batches_this_epoch':int(last_batch_index+1),'usable_batches_this_epoch':int(usable_batches)})
+        common=dict(model=model,ema=ema,optimizer=opt,scheduler=sched,epoch=ep,global_optimizer_step=gs,cfg=cfg,best_val_metric=best,best_val_threshold=best_th,split_manifest_hashes=name_hashes,split_manifest_content_hashes=content_hashes,source_provenance=source_provenance,seed=seed,extra_state={'global_sample_offset':global_sample_offset,'fairness':fairness,'runtime_policy':runtime_policy,**resume_taint,'epoch_complete':bool(epoch_complete),'processed_batches_this_epoch':int(last_batch_index+1),'usable_batches_this_epoch':int(usable_batches),'budget_reached':bool(gs>=planned_steps),'run_complete':bool(gs>=planned_steps)})
         save_checkpoint_atomic(os.path.join(out,'last.pt'),**common)
         if improved:save_checkpoint_atomic(os.path.join(out,'best.pt'),**common)
         json.dump({'history':hist,'best_val_f1':best,'best_val_threshold':best_th,'fairness':fairness},open(os.path.join(out,'history.json'),'w'),indent=2)
         if stop_budget: break
+    if gs != planned_steps:
+        raise RuntimeError(f'training ended incomplete: completed_optimizer_steps={gs}, planned_optimizer_steps={planned_steps}')
+    best_path=os.path.join(out,'best.pt');final_path=os.path.join(out,'last.pt')
+    if not os.path.isfile(best_path) or not os.path.isfile(final_path):
+        raise RuntimeError('training reached its budget but best.pt/last.pt completion artifacts are missing')
+    completion={
+        'schema':'CRACKMEANFLOW_RUN_COMPLETION_V1','status':'PASS','best_checkpoint':'best.pt','best_checkpoint_sha256':file_sha256(best_path),
+        'final_checkpoint':'last.pt','final_checkpoint_sha256':file_sha256(final_path),'planned_optimizer_steps':int(planned_steps),
+        'completed_optimizer_steps':int(gs),'best_optimizer_step':int(torch.load(best_path,map_location='cpu',weights_only=False).get('global_optimizer_step',-1)),
+        'best_val_metric':float(best),'best_val_threshold':float(best_th),'config_hash':config_hash(cfg),
+        'source_tree_sha256':source_tree_hash(),'protocol_bundle_sha256':protocol_bundle_hash(),'training_runtime_seconds':time.time()-run_started,
+        'required_artifacts':['EFFECTIVE_CONFIG.yaml','dataset_manifest.json','RUN_IDENTITY.json','ENVIRONMENT.json','history.json','best.pt','last.pt'],
+    }
+    write_immutable_json(os.path.join(out,'RUN_COMPLETE.json'),completion)
+    print(json.dumps({'status':'PASS','run_complete':True,'completed_optimizer_steps':gs,'planned_optimizer_steps':planned_steps,'out':out},sort_keys=True))
 if __name__=='__main__':main()

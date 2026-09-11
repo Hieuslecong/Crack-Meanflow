@@ -1,5 +1,6 @@
 protocol: optimizer_recipe_sensitivity
-matched_optimizer_steps: 21000
+matched_optimizer_steps: 82500
+budget_interpretation: local_split_aligned_complete_epochs
 models:
   Conference: configs/conference/crackmeanflow_unet.yaml
   A2B_BASELINE: configs/journal/a2b_original_mismatch_control.yaml

@@ -27,7 +27,8 @@ def aggregate_geometry(collected,threshold,max_radius,representation,distance_en
                 if float(pred[bi].sum().detach().cpu())>0:empty_gt_fp+=1
         if include_geometry:
             gg,_=mask_to_geometry_state(gt_pm1,max_radius,representation,distance_encoding); c_pred,r_pred=geometry_state_to_fields(geom,max_radius,representation,distance_encoding); c_gt,r_gt=geometry_state_to_fields(gg,max_radius,representation,distance_encoding)
-            geoms.append(geometry_centerline_metrics(c_pred,c_gt,r_pred,r_gt,max_radius))
+            for bi in range(gt.shape[0]):
+                geoms.append(geometry_centerline_metrics(c_pred[bi:bi+1],c_gt[bi:bi+1],r_pred[bi:bi+1],r_gt[bi:bi+1],max_radius))
     if tp+fp+fn==0: pr=re=f1=iou=1.0
     else:
         pr=tp/max(tp+fp,1e-12); re=tp/max(tp+fn,1e-12); f1=2*pr*re/max(pr+re,1e-12); iou=tp/max(tp+fp+fn,1e-12)
