@@ -1,0 +1,54 @@
+protocol_version: CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V3
+supersedes: CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V2
+reason: >-
+  V3 repairs engineering/provenance semantics without changing the Conference,
+  A2B or A5 scientific architecture/loss. It locks the observed CFD training
+  geometry, separates research scheduler horizon from diagnostic stop budget,
+  and removes stale sample-count/epoch wording from the active protocol.
+source_dataset:
+  name: CFD
+  split_id: CFD_FROZEN_HISTORICAL_V1
+  expected_train_samples: 6606
+  test_policy: CLOSED_DURING_DEVELOPMENT
+  ood_policy: CLOSED_UNTIL_RESEARCH_LOCK
+primary_arms:
+  Conference: configs/post_repair_v3/conference.yaml
+  A2B_ENDPOINT: configs/post_repair_v3/a2b_endpoint.yaml
+  A5_ENDPOINT: configs/post_repair_v3/a5_endpoint.yaml
+optimization:
+  matched_optimizer_steps: 21000
+  expected_optimizer_steps_per_epoch: 825
+  effective_batch_size: 8
+  expected_usable_train_samples_per_epoch: 6600
+  expected_omitted_train_samples_per_epoch: 6
+  scheduler: warmup_cosine_per_optimizer_update
+  warmup_epochs: 10
+  expected_warmup_optimizer_steps: 8250
+  scheduler_total_optimizer_steps: 21000
+  stepping_frequency: optimizer_update
+validation:
+  checkpoint_interval_epochs: 5
+  expected_checkpoint_interval_optimizer_steps: 4125
+  checkpoint_selection_seeds: [0, 1, 2]
+  final_threshold_calibration_seeds: [0, 1, 2, 3, 4]
+  headline_nfe: 1
+diagnostic:
+  diagnostic_only: true
+  research_metric_valid: false
+  default_stop_optimizer_steps: 20
+  scheduler_total_optimizer_steps: 21000
+  training_smoke_validation_mode: none
+  pipeline_smoke_validation_mode: bounded
+  bounded_validation_max_batches: 4
+  bounded_validation_seeds: [0]
+runtime_policy:
+  Conference: {batch_size: 4, grad_accum_steps: 2}
+  A2B_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
+  A5_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
+provenance_requirements:
+  clean_worktree: true
+  run_identity: required
+  environment: required
+  dataset_manifest: required
+  run_complete_for_paper_runs: required
+  diagnostic_artifacts_must_not_be_paper_complete: true
