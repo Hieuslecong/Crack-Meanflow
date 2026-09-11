@@ -1,0 +1,81 @@
+from pathlib import Path
+
+import torch
+import yaml
+
+from crackmeanflow.common.scheduler import make_warmup_cosine_scheduler
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PROTOCOL = ROOT / "configs/protocol/post_repair_protocol_v3.yaml"
+CONFIG_DIR = ROOT / "configs/post_repair_v3"
+SMOKE = ROOT / "scripts/smoke_preflight_v3.py"
+
+
+def _load(path):
+    with open(path, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def test_v3_protocol_locks_observed_training_geometry():
+    p = _load(PROTOCOL)
+    assert p["source_dataset"]["expected_train_samples"] == 6606
+    assert p["optimization"]["expected_optimizer_steps_per_epoch"] == 825
+    assert p["optimization"]["effective_batch_size"] == 8
+    assert p["optimization"]["expected_usable_train_samples_per_epoch"] == 6600
+    assert p["optimization"]["expected_omitted_train_samples_per_epoch"] == 6
+    assert p["optimization"]["matched_optimizer_steps"] == 21000
+    assert p["optimization"]["expected_warmup_optimizer_steps"] == 8250
+
+
+def test_all_v3_primary_configs_lock_same_budget_and_effective_batch():
+    p = _load(PROTOCOL)
+    for cfg_rel in p["primary_arms"].values():
+        cfg = _load(ROOT / cfg_rel)
+        assert cfg["train"]["max_optimizer_steps"] == 21000
+        assert cfg["train"]["batch_size"] * cfg["train"]["grad_accum_steps"] == 8
+        assert cfg["eval"]["num_steps"] == 1
+        rationale = cfg["train"]["sample_balance"]["rationale"]
+        assert "1682" not in rationale
+        assert "6606" in rationale
+
+
+def test_diagnostic_scheduler_keeps_research_horizon():
+    parameter = torch.nn.Parameter(torch.tensor(1.0))
+    optimizer = torch.optim.AdamW([parameter], lr=1e-4)
+    scheduler = make_warmup_cosine_scheduler(
+        optimizer,
+        epochs=100,
+        optimizer_steps_epoch=825,
+        warmup_epochs=10,
+        total_optimizer_steps=21000,
+    )
+    assert scheduler._cmf_total_steps == 21000
+    assert scheduler._cmf_warmup_steps == 8250
+    for _ in range(20):
+        optimizer.step()
+        scheduler.step()
+    assert optimizer.param_groups[0]["lr"] > 0.0
+    assert scheduler._cmf_total_steps == 21000
+    assert scheduler._cmf_warmup_steps == 8250
+
+
+def test_smoke_runner_is_explicitly_non_paper_artifact():
+    source = SMOKE.read_text(encoding="utf-8")
+    assert '"diagnostic_only": True' in source
+    assert '"research_metric_valid": False' in source
+    assert '"eligible_for_paper": False' in source
+    assert '"writes_run_complete": False' in source
+    assert '"writes_best_checkpoint": False' in source
+    assert '"writes_last_checkpoint": False' in source
+    assert "RUN_COMPLETE.json" in source  # only in the safety docstring; never written
+    assert "write_immutable_json" not in source
+    assert "save_checkpoint_atomic" not in source
+
+
+def test_smoke_runner_has_independent_stop_and_scheduler_controls():
+    source = SMOKE.read_text(encoding="utf-8")
+    assert "--research-total-optimizer-steps" in source
+    assert "--diagnostic-stop-steps" in source
+    assert "total_optimizer_steps=research_total" in source
+    assert "while global_step < stop_steps" in source
