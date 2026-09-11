@@ -1,20 +1,29 @@
 protocol_version: CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V3
 supersedes: CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V2
 reason: >-
-  V3 repairs engineering/provenance semantics without changing the Conference,
-  A2B or A5 scientific architecture/loss. It locks the observed CFD training
-  geometry, separates research scheduler horizon from diagnostic stop budget,
-  and removes stale sample-count/epoch wording from the active protocol.
+  V3 repairs the engineering/provenance semantics around the authorized 21000
+  optimizer-update budget. It also makes the Conference curriculum explicitly
+  optimizer-step based so every intended stage is reachable under that budget.
 source_dataset:
   name: CFD
   split_id: CFD_FROZEN_HISTORICAL_V1
   expected_train_samples: 6606
-  test_policy: CLOSED_DURING_DEVELOPMENT
+  test_policy: METRICS_CLOSED_DURING_DEVELOPMENT_PROVENANCE_HASH_ALLOWED
   ood_policy: CLOSED_UNTIL_RESEARCH_LOCK
 primary_arms:
   Conference: configs/post_repair_v3/conference.yaml
   A2B_ENDPOINT: configs/post_repair_v3/a2b_endpoint.yaml
   A5_ENDPOINT: configs/post_repair_v3/a5_endpoint.yaml
+config_locks:
+  Conference:
+    semantic_sha256: 92ecfaaa038939cb2b13e0813aa4d703b99377f40dd84606bca162ae8f123b6b
+    file_sha256: 99e2eadce18a12d41f12a5b2667624ab8f63af0fdd335e1fcbec9e49e1ff3899
+  A2B_ENDPOINT:
+    semantic_sha256: acca3eb04fa18b61c654ecc995d9a492be3f2048387d454bfcf6e30bf8e551bc
+    file_sha256: 4e40aa629a52ccb8319ba242b8c0a364a2247368a24504bcbfd973518920a634
+  A5_ENDPOINT:
+    semantic_sha256: bfb36247f4fb8b28fc08f744bb0036946bd9e6f261f03ecead0956ee3ae98acf
+    file_sha256: 56dc6cb5b36efe81bbcda5aa25af2d9e6fc7052490c0e2d7c41e1af20e5267ed
 optimization:
   matched_optimizer_steps: 21000
   expected_optimizer_steps_per_epoch: 825
@@ -26,6 +35,20 @@ optimization:
   expected_warmup_optimizer_steps: 8250
   scheduler_total_optimizer_steps: 21000
   stepping_frequency: optimizer_update
+  warmup_interpretation: >-
+    V3 intentionally retains the authorized V2 warmup of 8250 optimizer updates
+    to avoid changing warmup and curriculum simultaneously. Because this is
+    39.3 percent of the 21000-update budget, warmup sensitivity remains a
+    preregistered scientific sensitivity analysis before a strong final claim.
+conference_curriculum:
+  basis: optimizer_step
+  effective_batch_size: 8
+  stages:
+    - {optimizer_steps: [0, 8250], fm_ratio: 1.0, max_gap: 0.0, boundary_prob: 0.0}
+    - {optimizer_steps: [8250, 11083], fm_ratio: 0.75, max_gap: 0.25, boundary_prob: 0.0}
+    - {optimizer_steps: [11083, 15333], fm_ratio: 0.6, max_gap: 0.5, boundary_prob: 0.0}
+    - {optimizer_steps: [15333, 21000], fm_ratio: 0.5, max_gap: 1.0, boundary_prob: 0.15}
+  endpoint_stage_optimizer_steps: 5667
 validation:
   checkpoint_interval_epochs: 5
   expected_checkpoint_interval_optimizer_steps: 4125
@@ -41,14 +64,33 @@ diagnostic:
   pipeline_smoke_validation_mode: bounded
   bounded_validation_max_batches: 4
   bounded_validation_seeds: [0]
+  branch_coverage_required:
+    Conference: [endpoint, thin]
+    A2B_ENDPOINT: [endpoint]
+    A5_ENDPOINT: [endpoint, gic]
 runtime_policy:
   Conference: {batch_size: 4, grad_accum_steps: 2}
   A2B_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
   A5_ENDPOINT: {batch_size: 1, grad_accum_steps: 8}
 provenance_requirements:
-  clean_worktree: true
+  clean_worktree_including_untracked_source: true
+  bind_commit: true
+  bind_source_tree_sha256: true
+  bind_protocol_file_sha256: true
+  bind_protocol_bundle_sha256: true
+  bind_config_file_sha256: true
+  bind_config_semantic_sha256: true
   run_identity: required
   environment: required
   dataset_manifest: required
   run_complete_for_paper_runs: required
   diagnostic_artifacts_must_not_be_paper_complete: true
+resume_gate:
+  continuous_steps: 20
+  split_steps: [10, 10]
+  compare_model: exact_digest
+  compare_ema: exact_digest
+  compare_optimizer: state_digest
+  compare_scheduler: state_digest
+  compare_rng: required
+  compare_loss_trajectory: required
