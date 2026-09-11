@@ -19,22 +19,11 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crackmeanflow.common import config_hash, file_sha256, protocol_bundle_hash, source_tree_hash
+from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers
 
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], stderr=subprocess.STDOUT, text=True).strip()
-
-
-def _worktree_blockers() -> list[str]:
-    raw = _git("status", "--porcelain=v1", "--untracked-files=all")
-    allowed = ("reports/", "outputs/", "_data/")
-    blockers = []
-    for row in [x for x in raw.splitlines() if x.strip()]:
-        path = (row[3:] if len(row) >= 4 else row).strip().strip('"')
-        if row.startswith("?? ") and path.startswith(allowed):
-            continue
-        blockers.append(row)
-    return blockers
 
 
 def main() -> None:
@@ -53,15 +42,11 @@ def main() -> None:
     protocol = yaml.safe_load(open(args.protocol, "r", encoding="utf-8"))
     cfg = yaml.safe_load(open(args.config, "r", encoding="utf-8"))
     config_path = str(Path(args.config).as_posix())
-    arm = None
-    for name, path in protocol["primary_arms"].items():
-        if str(Path(path).as_posix()) == config_path:
-            arm = name
-            break
+    arm = next((name for name, path in protocol["primary_arms"].items() if str(Path(path).as_posix()) == config_path), None)
     if arm is None:
         raise RuntimeError(f"config is not a V3 primary arm: {config_path}")
 
-    blockers = _worktree_blockers()
+    blockers = paper_v3_worktree_blockers()
     if blockers:
         raise RuntimeError(f"worktree is not provenance-clean: {blockers}")
 
@@ -69,23 +54,24 @@ def main() -> None:
     cfg_file = file_sha256(args.config)
     lock = protocol["config_locks"][arm]
     if cfg_sem != lock["semantic_sha256"] or cfg_file != lock["file_sha256"]:
-        raise RuntimeError(
-            f"config lock mismatch for {arm}: semantic={cfg_sem}, file={cfg_file}, expected={lock}"
-        )
+        raise RuntimeError(f"config lock mismatch for {arm}: semantic={cfg_sem}, file={cfg_file}, expected={lock}")
     if int(args.research_total_optimizer_steps) != int(protocol["optimization"]["scheduler_total_optimizer_steps"]):
         raise RuntimeError("research scheduler horizon differs from V3 protocol")
 
-    provenance_before = {
-        "branch": _git("branch", "--show-current"),
-        "commit": _git("rev-parse", "HEAD"),
-        "source_tree_sha256": source_tree_hash(),
-        "protocol_file_sha256": file_sha256(args.protocol),
-        "protocol_bundle_sha256": protocol_bundle_hash(),
-        "config_file_sha256": cfg_file,
-        "config_semantic_sha256": cfg_sem,
-        "arm": arm,
-    }
+    def provenance_snapshot():
+        return {
+            "branch": _git("branch", "--show-current"),
+            "commit": _git("rev-parse", "HEAD"),
+            "source_tree_sha256": source_tree_hash(),
+            "protocol_file_sha256": file_sha256(args.protocol),
+            "protocol_bundle_sha256_legacy_global": protocol_bundle_hash(),
+            "protocol_bundle_sha256_v3_active": active_v3_bundle_hash(args.protocol, protocol),
+            "config_file_sha256": file_sha256(args.config),
+            "config_semantic_sha256": config_hash(yaml.safe_load(open(args.config, "r", encoding="utf-8"))),
+            "arm": arm,
+        }
 
+    provenance_before = provenance_snapshot()
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     raw_out = out.with_suffix(out.suffix + ".raw.json")
@@ -107,16 +93,7 @@ def main() -> None:
         raise RuntimeError(f"underlying V3 smoke failed with exit code {completed.returncode}")
     raw_report = json.loads(raw_out.read_text(encoding="utf-8"))
 
-    provenance_after = {
-        "branch": _git("branch", "--show-current"),
-        "commit": _git("rev-parse", "HEAD"),
-        "source_tree_sha256": source_tree_hash(),
-        "protocol_file_sha256": file_sha256(args.protocol),
-        "protocol_bundle_sha256": protocol_bundle_hash(),
-        "config_file_sha256": file_sha256(args.config),
-        "config_semantic_sha256": config_hash(yaml.safe_load(open(args.config, "r", encoding="utf-8"))),
-        "arm": arm,
-    }
+    provenance_after = provenance_snapshot()
     if provenance_before != provenance_after:
         raise RuntimeError("execution identity changed during smoke run")
 
@@ -127,6 +104,7 @@ def main() -> None:
         "research_metric_valid": False,
         "eligible_for_paper": False,
         "provenance": provenance_before,
+        "gpu_driver": nvidia_driver_info(),
         "raw_smoke": raw_report,
     }
     out.write_text(json.dumps(envelope, indent=2, sort_keys=True), encoding="utf-8")
