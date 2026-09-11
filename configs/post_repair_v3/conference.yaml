@@ -57,11 +57,31 @@ loss:
   boundary_sampling: stratified
   time_curriculum:
     enabled: true
+    basis: optimizer_step
+    effective_batch_size: 8
+    rationale: >-
+      The historical 0-10-30-60-100 epoch schedule was defined for a 100-epoch
+      local recipe and became unreachable after the matched budget changed to
+      21000 updates. V3 retains the explicitly authorized 8250-update warmup,
+      then compresses the historical post-warmup stage durations in the same
+      20:30:40 ratio across the remaining 12750 optimizer updates.
     stages:
-      - {epochs: [0, 10], fm_ratio: 1.0, max_gap: 0.0, boundary_prob: 0.0}
-      - {epochs: [10, 30], fm_ratio: 0.75, max_gap: 0.25, boundary_prob: 0.0}
-      - {epochs: [30, 60], fm_ratio: 0.6, max_gap: 0.5, boundary_prob: 0.0}
-      - {epochs: [60, 100000], fm_ratio: 0.5, max_gap: 1.0, boundary_prob: 0.15}
+      - optimizer_steps: [0, 8250]
+        fm_ratio: 1.0
+        max_gap: 0.0
+        boundary_prob: 0.0
+      - optimizer_steps: [8250, 11083]
+        fm_ratio: 0.75
+        max_gap: 0.25
+        boundary_prob: 0.0
+      - optimizer_steps: [11083, 15333]
+        fm_ratio: 0.6
+        max_gap: 0.5
+        boundary_prob: 0.0
+      - optimizer_steps: [15333, 21000]
+        fm_ratio: 0.5
+        max_gap: 1.0
+        boundary_prob: 0.15
 eval:
   num_steps: 1
   cfg_scale: 1.0
