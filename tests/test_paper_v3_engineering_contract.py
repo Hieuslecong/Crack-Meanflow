@@ -13,6 +13,7 @@ PROTOCOL = ROOT / "configs/protocol/post_repair_protocol_v3.yaml"
 CONFIG_DIR = ROOT / "configs/post_repair_v3"
 SMOKE = ROOT / "scripts/smoke_preflight_v3.py"
 SMOKE_GATE = ROOT / "scripts/smoke_gate_v3.py"
+SCREEN_RUNNER = ROOT / "scripts/train_generalization_screen_v3.py"
 BRANCH_PROBE = ROOT / "scripts/branch_coverage_probe_v3.py"
 RESUME_PROBE = ROOT / "scripts/resume_equivalence_v3.py"
 FAST_BENCHMARK = ROOT / "scripts/benchmark_microbatch_v3.py"
@@ -153,3 +154,12 @@ def test_fast_benchmark_contract_is_diagnostic_and_horizon_locked():
     assert '"research_metric_valid": False' in source
     assert '"eligible_for_paper": False' in source
     assert "research scheduler horizon must remain exactly 21000" in source
+
+
+def test_fast_execution_runners_require_fast_preflight_verification():
+    smoke = SMOKE_GATE.read_text(encoding="utf-8")
+    screen = SCREEN_RUNNER.read_text(encoding="utf-8")
+    assert "--preflight" in smoke
+    assert "verify_v3_fast_provenance" in smoke
+    assert "verify_v3_fast_provenance" in screen
+    assert "protocol_variant" in screen

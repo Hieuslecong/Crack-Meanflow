@@ -19,18 +19,33 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crackmeanflow.common import config_hash, file_sha256, protocol_bundle_hash, source_tree_hash
-from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers
+from crackmeanflow.common.v3_provenance import (
+    active_v3_bundle_hash,
+    nvidia_driver_info,
+    paper_v3_worktree_blockers,
+    verify_v3_fast_provenance,
+    verify_v3_provenance,
+)
 
 
 def _git(*args: str) -> str:
     return subprocess.check_output(["git", *args], stderr=subprocess.STDOUT, text=True).strip()
 
 
+def _verify_execution_provenance(*, protocol_path: str, **kwargs) -> dict:
+    protocol = yaml.safe_load(Path(protocol_path).read_text(encoding="utf-8"))
+    verifier = verify_v3_fast_provenance if protocol.get("protocol_variant") == "FAST_PARTITION_ONLY" else verify_v3_provenance
+    return verifier(protocol_path=protocol_path, **kwargs)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True)
     ap.add_argument("--protocol", default="configs/protocol/post_repair_protocol_v3.yaml")
+    ap.add_argument("--preflight", default="reports/PROTOCOL_PREFLIGHT_V3.json")
     ap.add_argument("--data", required=True)
+    ap.add_argument("--dataset-name", default="CFD")
+    ap.add_argument("--dataset-version", default="CFD_FROZEN_HISTORICAL_V1")
     ap.add_argument("--research-total-optimizer-steps", type=int, default=21000)
     ap.add_argument("--diagnostic-stop-steps", type=int, default=20)
     ap.add_argument("--validation-mode", choices=["none", "bounded"], default="none")
@@ -57,6 +72,15 @@ def main() -> None:
         raise RuntimeError(f"config lock mismatch for {arm}: semantic={cfg_sem}, file={cfg_file}, expected={lock}")
     if int(args.research_total_optimizer_steps) != int(protocol["optimization"]["scheduler_total_optimizer_steps"]):
         raise RuntimeError("research scheduler horizon differs from V3 protocol")
+    verified_provenance = _verify_execution_provenance(
+        protocol_path=args.protocol,
+        config_path=args.config,
+        preflight_path=args.preflight,
+        dataset_name=args.dataset_name,
+        dataset_version=args.dataset_version,
+        research_total_optimizer_steps=args.research_total_optimizer_steps,
+        diagnostic_stop_optimizer_steps=args.diagnostic_stop_steps,
+    )
 
     def provenance_snapshot():
         return {
@@ -103,6 +127,8 @@ def main() -> None:
         "diagnostic_only": True,
         "research_metric_valid": False,
         "eligible_for_paper": False,
+        "preflight": args.preflight,
+        "verified_provenance": {k: v for k, v in verified_provenance.items() if k not in {"protocol", "config", "preflight"}},
         "provenance": provenance_before,
         "gpu_driver": nvidia_driver_info(),
         "raw_smoke": raw_report,

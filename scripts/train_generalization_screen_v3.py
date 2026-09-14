@@ -43,7 +43,11 @@ from crackmeanflow.common import (  # noqa: E402
     write_split_manifest,
 )
 from crackmeanflow.common.training_protocol import training_split_view  # noqa: E402
-from crackmeanflow.common.v3_provenance import paper_v3_worktree_blockers, verify_v3_provenance  # noqa: E402
+from crackmeanflow.common.v3_provenance import (  # noqa: E402
+    paper_v3_worktree_blockers,
+    verify_v3_fast_provenance,
+    verify_v3_provenance,
+)
 from crackmeanflow.journal.engine.dataset import GeometryDataset  # noqa: E402
 from scripts.train_journal import (  # noqa: E402
     _group_fn,
@@ -203,6 +207,12 @@ def _parse_snapshot_steps(raw: str) -> tuple[int, ...]:
         raise ValueError("--snapshot-steps must be comma-separated integers") from exc
 
 
+def _verify_execution_provenance(*, protocol_path: str, **kwargs) -> dict:
+    protocol = yaml.safe_load(Path(protocol_path).read_text(encoding="utf-8"))
+    verifier = verify_v3_fast_provenance if protocol.get("protocol_variant") == "FAST_PARTITION_ONLY" else verify_v3_provenance
+    return verifier(protocol_path=protocol_path, **kwargs)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="V3 source-only fixed-step generalization screen runner")
     ap.add_argument("--config", required=True)
@@ -228,7 +238,7 @@ def main() -> None:
     if blockers:
         raise RuntimeError(f"paper-v3 worktree is not provenance-clean: {blockers}")
 
-    verified_provenance = verify_v3_provenance(
+    verified_provenance = _verify_execution_provenance(
         protocol_path=args.protocol,
         config_path=args.config,
         preflight_path=args.preflight,
@@ -260,7 +270,7 @@ def main() -> None:
         audit_group_integrity(sp, _group_fn(group_regex))
     content_leakage = audit_content_split_integrity(sp)
     identities = build_dataset_identity(sp, include_rows=False)
-    verify_v3_provenance(
+    _verify_execution_provenance(
         protocol_path=args.protocol,
         config_path=args.config,
         preflight_path=args.preflight,
