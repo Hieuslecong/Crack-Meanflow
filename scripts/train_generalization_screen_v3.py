@@ -316,7 +316,7 @@ def main() -> None:
     ema = EMA(model, cfg["train"]["ema_decay"])
     cfg_sha = config_hash(cfg)
     source_sha = source_tree_hash()
-    protocol_sha = protocol_bundle_hash()
+    protocol_sha = verified_provenance["protocol_bundle_sha256_v3_active"]
     fairness = {
         "samples_train": len(train_ds),
         "batch_size": int(cfg["train"]["batch_size"]),

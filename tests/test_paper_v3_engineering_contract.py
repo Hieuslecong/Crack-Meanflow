@@ -163,3 +163,8 @@ def test_fast_execution_runners_require_fast_preflight_verification():
     assert "verify_v3_fast_provenance" in smoke
     assert "verify_v3_fast_provenance" in screen
     assert "protocol_variant" in screen
+
+
+def test_screen_artifacts_record_active_protocol_bundle_hash():
+    source = SCREEN_RUNNER.read_text(encoding="utf-8")
+    assert 'protocol_sha = verified_provenance["protocol_bundle_sha256_v3_active"]' in source
