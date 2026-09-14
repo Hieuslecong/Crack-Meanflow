@@ -56,8 +56,8 @@ def main() -> None:
         complete = out / "RUN_COMPLETE.json"
         if complete.is_file():
             import torch
-            record = verify_run_completion_artifact(best, torch.load(best, map_location="cpu", weights_only=False))
-            require_complete_checkpoint(torch.load(last, map_location="cpu", weights_only=False), expected_optimizer_steps=int(row["training_budget"]["planned_optimizer_steps"]))
+            record = verify_run_completion_artifact(best, torch.load(best, map_location="cpu", weights_only=False), eligibility_class="headline")
+            require_complete_checkpoint(torch.load(last, map_location="cpu", weights_only=False), eligibility_class="headline", expected_optimizer_steps=int(row["training_budget"]["planned_optimizer_steps"]))
             status = "SKIP_ALREADY_COMPLETE"
         else:
             command = [str(args.data_root) if token == "${DATA_ROOT}" else token for token in row["command"]]
@@ -78,8 +78,8 @@ def main() -> None:
             if result.returncode != 0:
                 raise RuntimeError(f"run {row['run_id']} failed with return code {result.returncode}; see {out}")
             import torch
-            record = verify_run_completion_artifact(best, torch.load(best, map_location="cpu", weights_only=False))
-            require_complete_checkpoint(torch.load(last, map_location="cpu", weights_only=False), expected_optimizer_steps=int(row["training_budget"]["planned_optimizer_steps"]))
+            record = verify_run_completion_artifact(best, torch.load(best, map_location="cpu", weights_only=False), eligibility_class="headline")
+            require_complete_checkpoint(torch.load(last, map_location="cpu", weights_only=False), eligibility_class="headline", expected_optimizer_steps=int(row["training_budget"]["planned_optimizer_steps"]))
             status = "PASS"
         with log_path.open("a", encoding="utf-8") as journal:
             journal.write(json.dumps({"run_id": row["run_id"], "status": status, "completed_optimizer_steps": record["completed_optimizer_steps"]}) + "\n")

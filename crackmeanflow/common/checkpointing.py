@@ -20,7 +20,18 @@ def source_tree_manifest(root=None):
     files=[]
     base=root/'crackmeanflow'
     if base.exists(): files.extend(p for p in base.rglob('*.py') if '__pycache__' not in p.parts)
-    for name in ('scripts/train_journal.py','scripts/evaluate_journal.py','scripts/freeze_source_threshold.py'):
+    for name in (
+        'scripts/train_journal.py',
+        'scripts/train_paper_v3.py',
+        'scripts/train_generalization_screen_v3.py',
+        'scripts/evaluate_journal.py',
+        'scripts/freeze_source_threshold.py',
+        'scripts/execute_experiment_queue.py',
+        'scripts/smoke_preflight_v3.py',
+        'scripts/smoke_gate_v3.py',
+        'scripts/branch_coverage_probe_v3.py',
+        'scripts/resume_equivalence_v3.py',
+    ):
         q=root/name
         if q.exists(): files.append(q)
     for name in ('requirements.txt','pytest.ini'):

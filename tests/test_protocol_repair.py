@@ -56,7 +56,7 @@ def test_checkpoint_completion_is_fail_closed_for_missing_or_short_runs():
         },
     }
     with pytest.raises(RuntimeError, match="planned optimizer steps"):
-        require_complete_checkpoint(incomplete)
+        require_complete_checkpoint(incomplete, eligibility_class="headline")
 
     complete = {
         "global_optimizer_step": 20,
@@ -71,7 +71,35 @@ def test_checkpoint_completion_is_fail_closed_for_missing_or_short_runs():
             "budget_reached": True,
         },
     }
-    assert require_complete_checkpoint(complete)["completed_optimizer_steps"] == 20
+    complete["extra_state"].update(
+        diagnostic_only=False, research_metric_valid=True, eligible_for_paper=True
+    )
+    assert require_complete_checkpoint(complete, eligibility_class="headline")["completed_optimizer_steps"] == 20
+
+
+def test_diagnostic_checkpoint_is_rejected_for_headline_but_valid_as_diagnostic():
+    from crackmeanflow.common.training_protocol import require_complete_checkpoint
+
+    checkpoint = {
+        "global_optimizer_step": 20,
+        "best_val_metric": 0.5,
+        "best_val_threshold": 0.5,
+        "config_hash": "config",
+        "source_tree_sha256": "source",
+        "protocol_bundle_sha256": "protocol",
+        "extra_state": {
+            "fairness": {"planned_optimizer_steps": 20},
+            "epoch_complete": True,
+            "budget_reached": True,
+            "diagnostic_only": True,
+            "research_metric_valid": False,
+            "eligible_for_paper": False,
+        },
+    }
+    with pytest.raises(RuntimeError, match="headline eligibility"):
+        require_complete_checkpoint(checkpoint, eligibility_class="headline")
+    status = require_complete_checkpoint(checkpoint, eligibility_class="diagnostic")
+    assert status["eligibility_class"] == "diagnostic"
 
 
 def test_run_completion_rejects_nonfinite_training_runtime(tmp_path):
@@ -113,7 +141,72 @@ def test_run_completion_rejects_nonfinite_training_runtime(tmp_path):
     (tmp_path / "RUN_COMPLETE.json").write_text(json.dumps(record))
 
     with pytest.raises(RuntimeError, match="runtime"):
-        verify_run_completion_artifact(best, common)
+        verify_run_completion_artifact(best, common, eligibility_class="diagnostic")
+
+
+def test_run_completion_binds_earlier_best_checkpoint_to_its_own_metric(tmp_path):
+    from crackmeanflow.common.training_protocol import verify_run_completion_artifact
+
+    flags = {"diagnostic_only": True, "research_metric_valid": False, "eligible_for_paper": False}
+    base = {
+        "config_hash": "config",
+        "source_tree_sha256": "source",
+        "protocol_bundle_sha256": "protocol",
+    }
+    best_payload = {
+        **base,
+        "global_optimizer_step": 10,
+        "best_val_metric": 0.8,
+        "best_val_threshold": 0.4,
+        "extra_state": {
+            "fairness": {"planned_optimizer_steps": 20},
+            "epoch_complete": True,
+            "budget_reached": False,
+            "run_complete": False,
+            **flags,
+        },
+    }
+    final_payload = {
+        **base,
+        "global_optimizer_step": 20,
+        "best_val_metric": 0.7,
+        "best_val_threshold": 0.5,
+        "extra_state": {
+            "fairness": {"planned_optimizer_steps": 20},
+            "epoch_complete": True,
+            "budget_reached": True,
+            "run_complete": True,
+            **flags,
+        },
+    }
+    best = tmp_path / "best.pt"
+    last = tmp_path / "last.pt"
+    torch.save(best_payload, best)
+    torch.save(final_payload, last)
+    record = {
+        "schema": "CRACKMEANFLOW_RUN_COMPLETION_V1",
+        "status": "PASS",
+        "best_checkpoint": best.name,
+        "best_checkpoint_sha256": hashlib.sha256(best.read_bytes()).hexdigest(),
+        "final_checkpoint": last.name,
+        "final_checkpoint_sha256": hashlib.sha256(last.read_bytes()).hexdigest(),
+        "planned_optimizer_steps": 20,
+        "completed_optimizer_steps": 20,
+        "best_optimizer_step": 10,
+        "best_val_metric": 0.8,
+        "best_val_threshold": 0.4,
+        "config_hash": "config",
+        "source_tree_sha256": "source",
+        "protocol_bundle_sha256": "protocol",
+        "training_runtime_seconds": 1.0,
+        "required_artifacts": [],
+        **flags,
+    }
+    (tmp_path / "RUN_COMPLETE.json").write_text(json.dumps(record))
+
+    verified = verify_run_completion_artifact(best, best_payload, eligibility_class="diagnostic")
+    assert verified["best_optimizer_step"] == 10
+    assert hashlib.sha256(best.read_bytes()).hexdigest() != hashlib.sha256(last.read_bytes()).hexdigest()
 
 
 def test_execution_identity_guard_rejects_a_changed_source_or_effective_config():

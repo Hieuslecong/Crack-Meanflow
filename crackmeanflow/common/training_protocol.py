@@ -65,10 +65,13 @@ def validate_execution_identity(
 def require_complete_checkpoint(
     checkpoint: Mapping[str, Any],
     *,
+    eligibility_class: str,
     expected_optimizer_steps: int | None = None,
     exact_budget: bool = True,
 ) -> dict[str, Any]:
     """Validate checkpoint completion metadata before scientific evaluation."""
+    if eligibility_class not in {"headline", "diagnostic"}:
+        raise ValueError("eligibility_class must be headline or diagnostic")
     if not isinstance(checkpoint, Mapping):
         raise RuntimeError("checkpoint completion metadata is missing")
     extra = checkpoint.get("extra_state")
@@ -102,11 +105,23 @@ def require_complete_checkpoint(
     for key in ("config_hash", "source_tree_sha256", "protocol_bundle_sha256"):
         if not checkpoint.get(key):
             raise RuntimeError(f"checkpoint provenance is missing {key}")
+    expected_eligibility = {
+        "headline": (False, True, True),
+        "diagnostic": (True, False, False),
+    }[eligibility_class]
+    actual_eligibility = (
+        extra.get("diagnostic_only"),
+        extra.get("research_metric_valid"),
+        extra.get("eligible_for_paper"),
+    )
+    if actual_eligibility != expected_eligibility:
+        raise RuntimeError(f"checkpoint does not satisfy {eligibility_class} eligibility")
     return {
         "planned_optimizer_steps": planned,
         "completed_optimizer_steps": completed,
         "epoch_complete": bool(extra.get("epoch_complete")),
         "budget_reached": bool(extra.get("budget_reached")),
+        "eligibility_class": eligibility_class,
     }
 
 
@@ -121,6 +136,8 @@ def _file_sha256(path: Path) -> str:
 def verify_run_completion_artifact(
     checkpoint_path: str | Path,
     checkpoint: Mapping[str, Any],
+    *,
+    eligibility_class: str,
 ) -> dict[str, Any]:
     """Verify the immutable record binding a selected checkpoint to run end."""
     selected_path = Path(checkpoint_path).resolve()
@@ -141,6 +158,18 @@ def verify_run_completion_artifact(
         raise RuntimeError("selected checkpoint is not the immutable validation-selected best checkpoint")
     if record.get("best_checkpoint_sha256") != _file_sha256(selected_path):
         raise RuntimeError("run completion artifact best checkpoint hash mismatch")
+    selected_status = require_complete_checkpoint(
+        checkpoint,
+        eligibility_class=eligibility_class,
+        expected_optimizer_steps=record.get("planned_optimizer_steps"),
+        exact_budget=False,
+    )
+    if record.get("best_optimizer_step") != selected_status["completed_optimizer_steps"]:
+        raise RuntimeError("run completion artifact best optimizer-step mismatch")
+    if record.get("best_val_metric") != checkpoint.get("best_val_metric"):
+        raise RuntimeError("run completion artifact best validation metric mismatch")
+    if record.get("best_val_threshold") != checkpoint.get("best_val_threshold"):
+        raise RuntimeError("run completion artifact best validation threshold mismatch")
     final_name = record.get("final_checkpoint")
     final_path = selected_path.parent / str(final_name) if final_name else None
     if final_path is None or not final_path.is_file():
@@ -150,11 +179,26 @@ def verify_run_completion_artifact(
     import torch
 
     final_checkpoint = torch.load(final_path, map_location="cpu", weights_only=False)
-    final_status = require_complete_checkpoint(final_checkpoint, expected_optimizer_steps=record.get("planned_optimizer_steps"))
+    final_status = require_complete_checkpoint(
+        final_checkpoint,
+        eligibility_class=eligibility_class,
+        expected_optimizer_steps=record.get("planned_optimizer_steps"),
+    )
     if final_checkpoint.get("extra_state", {}).get("run_complete") is not True:
         raise RuntimeError("final checkpoint is not marked run_complete")
     if record.get("completed_optimizer_steps") != final_status["completed_optimizer_steps"]:
         raise RuntimeError("run completion artifact optimizer-step mismatch")
+    expected_record_eligibility = {
+        "headline": (False, True, True),
+        "diagnostic": (True, False, False),
+    }[eligibility_class]
+    actual_record_eligibility = (
+        record.get("diagnostic_only"),
+        record.get("research_metric_valid"),
+        record.get("eligible_for_paper"),
+    )
+    if actual_record_eligibility != expected_record_eligibility:
+        raise RuntimeError(f"run completion artifact does not satisfy {eligibility_class} eligibility")
     for key in ("config_hash", "source_tree_sha256", "protocol_bundle_sha256"):
         if record.get(key) != checkpoint.get(key) or record.get(key) != final_checkpoint.get(key):
             raise RuntimeError(f"run completion artifact provenance mismatch for {key}")

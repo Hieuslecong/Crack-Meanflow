@@ -43,7 +43,7 @@ from crackmeanflow.common import (  # noqa: E402
     write_split_manifest,
 )
 from crackmeanflow.common.training_protocol import training_split_view  # noqa: E402
-from crackmeanflow.common.v3_provenance import paper_v3_worktree_blockers  # noqa: E402
+from crackmeanflow.common.v3_provenance import paper_v3_worktree_blockers, verify_v3_provenance  # noqa: E402
 from crackmeanflow.journal.engine.dataset import GeometryDataset  # noqa: E402
 from scripts.train_journal import (  # noqa: E402
     _group_fn,
@@ -87,8 +87,8 @@ def validate_screen_spec(
     cadence = int(optimizer_steps_per_epoch)
     if total < 1:
         raise ValueError("research_total_optimizer_steps must be positive")
-    if stop < 1 or stop > total:
-        raise ValueError("diagnostic stop must be in [1, research horizon]")
+    if stop < 1 or stop >= total:
+        raise ValueError("diagnostic stop must be positive and shorter than research horizon")
     if cadence < 1:
         raise ValueError("optimizer_steps_epoch must be positive")
     if not steps or len(set(steps)) != len(steps) or tuple(sorted(steps)) != steps:
@@ -106,20 +106,33 @@ def validate_screen_spec(
     }
 
 
-def _state_hash(state: dict) -> str:
+def _state_hash(state) -> str:
     digest = hashlib.sha256()
-    for key in sorted(state):
-        value = state[key]
-        digest.update(str(key).encode("utf-8"))
-        digest.update(b"\0")
+
+    def update(value) -> None:
         if torch.is_tensor(value):
             tensor = value.detach().cpu().contiguous()
+            digest.update(b"tensor\0")
             digest.update(str(tensor.dtype).encode("ascii"))
-            digest.update(repr(tuple(tensor.shape)).encode("ascii"))
+            digest.update(json.dumps(list(tensor.shape), separators=(",", ":")).encode("ascii"))
+            digest.update(b"\0")
             digest.update(tensor.numpy().tobytes())
+        elif isinstance(value, dict):
+            digest.update(b"dict\0")
+            for key in sorted(value, key=lambda item: str(item)):
+                update(str(key))
+                update(value[key])
+        elif isinstance(value, (list, tuple)):
+            digest.update(b"list\0" if isinstance(value, list) else b"tuple\0")
+            for item in value:
+                update(item)
         else:
-            digest.update(repr(value).encode("utf-8"))
+            digest.update(type(value).__name__.encode("ascii"))
+            digest.update(b"\0")
+            digest.update(json.dumps(value, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8"))
         digest.update(b"\n")
+
+    update(state)
     return digest.hexdigest()
 
 
@@ -201,8 +214,8 @@ def main() -> None:
     ap.add_argument("--research-total-optimizer-steps", type=int, default=21000)
     ap.add_argument("--diagnostic-stop-optimizer-steps", type=int, default=16500)
     ap.add_argument("--snapshot-steps", default="12375,16500")
-    ap.add_argument("--protocol", default=None)
-    ap.add_argument("--preflight", default=None)
+    ap.add_argument("--protocol", default="configs/protocol/post_repair_protocol_v3.yaml")
+    ap.add_argument("--preflight", default="reports/PROTOCOL_PREFLIGHT_V3.json")
     args = ap.parse_args()
 
     cfg_path = Path(args.config).resolve()
@@ -214,6 +227,16 @@ def main() -> None:
     blockers = paper_v3_worktree_blockers()
     if blockers:
         raise RuntimeError(f"paper-v3 worktree is not provenance-clean: {blockers}")
+
+    verified_provenance = verify_v3_provenance(
+        protocol_path=args.protocol,
+        config_path=args.config,
+        preflight_path=args.preflight,
+        dataset_name=args.dataset_name,
+        dataset_version=args.dataset_version,
+        research_total_optimizer_steps=args.research_total_optimizer_steps,
+        diagnostic_stop_optimizer_steps=args.diagnostic_stop_optimizer_steps,
+    )
 
     cfg = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))
     if not str(args.dataset_name).strip() or not str(args.dataset_version).strip():
@@ -237,6 +260,16 @@ def main() -> None:
         audit_group_integrity(sp, _group_fn(group_regex))
     content_leakage = audit_content_split_integrity(sp)
     identities = build_dataset_identity(sp, include_rows=False)
+    verify_v3_provenance(
+        protocol_path=args.protocol,
+        config_path=args.config,
+        preflight_path=args.preflight,
+        dataset_name=args.dataset_name,
+        dataset_version=args.dataset_version,
+        actual_dataset_identity=identities,
+        research_total_optimizer_steps=args.research_total_optimizer_steps,
+        diagnostic_stop_optimizer_steps=args.diagnostic_stop_optimizer_steps,
+    )
 
     base = lambda split, aug: PairedCrackDataset(
         training_sp[split],
@@ -323,6 +356,7 @@ def main() -> None:
         "seed": int(args.seed),
         "environment": env,
         "preflight": args.preflight,
+        "verified_v3_provenance": {k: v for k, v in verified_provenance.items() if k not in {"protocol", "config", "preflight"}},
     }
     (out / "RUN_IDENTITY.json").write_text(json.dumps(identity, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -331,10 +365,11 @@ def main() -> None:
     global_sample_offset = 0
     best_val = -1.0
     best_threshold = None
+    best_optimizer_step = None
+    best_validation_checkpoint = None
     snapshot_metadata = []
     timing = {"data_wait_seconds": 0.0, "h2d_seconds": 0.0, "forward_loss_seconds": 0.0, "backward_seconds": 0.0, "optimizer_seconds": 0.0, "ema_seconds": 0.0, "validation_seconds": 0.0, "checkpoint_seconds": 0.0}
     run_started = time.perf_counter()
-    pure_training_started = None
     torch.cuda.reset_peak_memory_stats()
 
     for epoch in range(int(cfg["train"]["epochs"])):
@@ -355,8 +390,6 @@ def main() -> None:
         for batch_index, batch in enumerate(loader):
             if drop_incomplete and batch_index >= steps * int(cfg["train"]["grad_accum_steps"]):
                 break
-            if pure_training_started is None:
-                pure_training_started = time.perf_counter()
             now = time.perf_counter()
             timing["data_wait_seconds"] += now - previous_batch_end
             last_batch = batch_index
@@ -425,9 +458,11 @@ def main() -> None:
             timing["validation_seconds"] += validation_seconds
             if not np.isfinite(float(validation["f1"])) or not np.isfinite(float(threshold)):
                 raise FloatingPointError(f"non-finite source validation at epoch={epoch}")
-            if float(validation["f1"]) > best_val:
+            improved = float(validation["f1"]) > best_val
+            if improved:
                 best_val = float(validation["f1"])
                 best_threshold = float(threshold)
+                best_optimizer_step = int(global_step)
 
         row = {
             "epoch": int(epoch),
@@ -455,20 +490,19 @@ def main() -> None:
         history.append(row)
         print(json.dumps(row, sort_keys=True), flush=True)
 
-        if global_step in spec["snapshot_steps"]:
-            if best_threshold is None:
-                raise RuntimeError("snapshot has no finite source-validation threshold")
+        validation_checkpoint = None
+        if should_validate:
             checkpoint_started = time.perf_counter()
-            snapshot = out / f"checkpoint_snapshot_{global_step}.pt"
-            snap_fairness = copy.deepcopy(fairness)
-            snap_fairness["planned_optimizer_steps"] = int(global_step)
-            snap_fairness["max_optimizer_steps"] = int(global_step)
-            extra = {
+            validation_checkpoint = out / f"checkpoint_validation_{global_step}.pt"
+            validation_fairness = copy.deepcopy(fairness)
+            validation_fairness["planned_optimizer_steps"] = int(args.diagnostic_stop_optimizer_steps)
+            validation_fairness["max_optimizer_steps"] = int(args.diagnostic_stop_optimizer_steps)
+            validation_extra = {
                 "global_sample_offset": int(global_sample_offset),
-                "fairness": snap_fairness,
+                "fairness": validation_fairness,
                 "epoch_complete": True,
-                "budget_reached": True,
-                "run_complete": True,
+                "budget_reached": bool(global_step == args.diagnostic_stop_optimizer_steps),
+                "run_complete": bool(global_step == args.diagnostic_stop_optimizer_steps),
                 "diagnostic_only": True,
                 "research_metric_valid": False,
                 "eligible_for_paper": False,
@@ -477,7 +511,7 @@ def main() -> None:
                 "diagnostic_stop_optimizer_steps": int(args.diagnostic_stop_optimizer_steps),
             }
             save_checkpoint_atomic(
-                str(snapshot),
+                str(validation_checkpoint),
                 model=model,
                 ema=ema,
                 optimizer=optimizer,
@@ -485,20 +519,30 @@ def main() -> None:
                 epoch=epoch,
                 global_optimizer_step=global_step,
                 cfg=cfg,
-                best_val_metric=best_val,
-                best_val_threshold=best_threshold,
+                best_val_metric=float(validation["f1"]),
+                best_val_threshold=float(threshold),
                 split_manifest_hashes={k: v["name_manifest_sha256"] for k, v in identities.items()},
                 split_manifest_content_hashes={k: v["content_manifest_sha256"] for k, v in identities.items()},
                 source_provenance=source_provenance,
                 seed=args.seed,
-                extra_state=extra,
+                extra_state=validation_extra,
             )
+            if improved:
+                best_validation_checkpoint = validation_checkpoint
+            timing["checkpoint_seconds"] += time.perf_counter() - checkpoint_started
+
+        if global_step in spec["snapshot_steps"]:
+            if validation_checkpoint is None or validation is None or threshold is None:
+                raise RuntimeError("every fixed snapshot must coincide with source validation")
+            checkpoint_started = time.perf_counter()
+            snapshot = out / f"checkpoint_snapshot_{global_step}.pt"
+            _link(validation_checkpoint, snapshot)
             # The checkpoint is immutable after creation; only hardlinks are made.
             completion_path = _write_snapshot_completion(
                 snapshot=snapshot,
                 step=global_step,
-                best_metric=best_val,
-                best_threshold=best_threshold,
+                best_metric=float(validation["f1"]),
+                best_threshold=float(threshold),
                 cfg_hash=cfg_sha,
                 source_hash=source_sha,
                 protocol_hash=protocol_sha,
@@ -513,10 +557,10 @@ def main() -> None:
                 "completion_artifact": str(completion_path.relative_to(out)),
                 "model_state_sha256": _state_hash(model.state_dict()),
                 "ema_state_sha256": _state_hash(ema.shadow),
-                "optimizer_state_sha256": hashlib.sha256(repr(optimizer.state_dict()).encode("utf-8")).hexdigest(),
-                "scheduler_state_sha256": hashlib.sha256(repr(scheduler.state_dict()).encode("utf-8")).hexdigest(),
-                "source_val_f1": float(best_val),
-                "source_val_threshold": float(best_threshold),
+                "optimizer_state_sha256": _state_hash(optimizer.state_dict()),
+                "scheduler_state_sha256": _state_hash(scheduler.state_dict()),
+                "source_val_f1": float(validation["f1"]),
+                "source_val_threshold": float(threshold),
                 "research_scheduler_total_steps": int(args.research_total_optimizer_steps),
                 "diagnostic_only": True,
                 "research_metric_valid": False,
@@ -533,15 +577,24 @@ def main() -> None:
         raise RuntimeError(f"screen ended incomplete: completed={global_step} expected={args.diagnostic_stop_optimizer_steps}")
     if [x["step"] for x in snapshot_metadata] != list(spec["snapshot_steps"]):
         raise RuntimeError("not all required fixed-step snapshots were produced")
+    if best_validation_checkpoint is None or best_optimizer_step is None or best_threshold is None:
+        raise RuntimeError("screen produced no validation-selected best checkpoint")
     final_snapshot = out / f"checkpoint_snapshot_{args.diagnostic_stop_optimizer_steps}.pt"
-    _link(final_snapshot, out / "best.pt")
+    _link(best_validation_checkpoint, out / "best.pt")
     _link(final_snapshot, out / "last.pt")
     total_runtime = time.perf_counter() - run_started
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         timing["gpu_peak_allocated_bytes"] = int(torch.cuda.max_memory_allocated())
         timing["gpu_peak_reserved_bytes"] = int(torch.cuda.max_memory_reserved())
-    timing["pure_training_seconds"] = float((time.perf_counter() - pure_training_started) if pure_training_started is not None else 0.0)
+    timing["pure_training_seconds"] = float(sum(timing[key] for key in (
+        "data_wait_seconds",
+        "h2d_seconds",
+        "forward_loss_seconds",
+        "backward_seconds",
+        "optimizer_seconds",
+        "ema_seconds",
+    )))
     timing["total_seconds"] = float(total_runtime)
     timing["seconds_per_optimizer_step"] = float(timing["pure_training_seconds"] / global_step)
     timing["samples_per_second"] = float(fairness["usable_samples_per_epoch"] * len(history) / max(timing["pure_training_seconds"], 1e-12))
@@ -565,7 +618,7 @@ def main() -> None:
         "final_checkpoint_sha256": file_sha256(out / "last.pt"),
         "planned_optimizer_steps": int(args.diagnostic_stop_optimizer_steps),
         "completed_optimizer_steps": int(global_step),
-        "best_optimizer_step": int(args.diagnostic_stop_optimizer_steps),
+        "best_optimizer_step": int(best_optimizer_step),
         "best_val_metric": float(best_val),
         "best_val_threshold": float(best_threshold),
         "config_hash": cfg_sha,

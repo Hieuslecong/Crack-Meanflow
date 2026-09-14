@@ -425,6 +425,11 @@ class RuntimeProfile:
             "samples_per_second": self._samples / measured if measured > 0 else None,
             "stages": stages,
             "gpu_peak_memory_bytes": _cuda_peak_memory(self.device),
+            "training_only_seconds": sum(
+                record["total_seconds"]
+                for name, record in self._stages.items()
+                if name == "train" or name.startswith("train_")
+            ),
         }
         return result
 

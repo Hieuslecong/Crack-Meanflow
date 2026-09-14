@@ -1,8 +1,12 @@
 import math
+import os
+import subprocess
+import sys
 
 import torch
 
 from scripts.train_generalization_screen_v3 import (
+    _state_hash,
     build_research_scheduler,
     validate_screen_spec,
 )
@@ -37,3 +41,29 @@ def test_screen_spec_requires_epoch_aligned_snapshots_and_shorter_stop():
         "diagnostic_stop_optimizer_steps": 16500,
         "snapshot_steps": [12375, 16500],
     }
+
+
+def test_screen_spec_rejects_stop_at_research_horizon():
+    import pytest
+
+    with pytest.raises(ValueError, match="shorter than research horizon"):
+        validate_screen_spec(21000, 21000, (21000,), 825)
+
+
+def test_state_hash_is_mapping_order_independent_and_nested():
+    left = {"z": {"b": torch.tensor([2]), "a": [1, 2]}, "a": 3.0}
+    right = {"a": 3.0, "z": {"a": [1, 2], "b": torch.tensor([2])}}
+    assert _state_hash(left) == _state_hash(right)
+
+
+def test_state_hash_is_stable_across_process_hash_seeds():
+    code = (
+        "import torch; from scripts.train_generalization_screen_v3 import _state_hash; "
+        "print(_state_hash({'state': {2: {'step': 7, 'tensor': torch.tensor([1., 2.])}, "
+        "1: {'values': (3, 4)}}}))"
+    )
+    outputs = []
+    for seed in ("1", "98765"):
+        env = dict(os.environ, PYTHONHASHSEED=seed)
+        outputs.append(subprocess.check_output([sys.executable, "-c", code], text=True, env=env).strip())
+    assert outputs[0] == outputs[1]

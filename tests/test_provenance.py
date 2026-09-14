@@ -34,3 +34,11 @@ def test_strict_ema_contract_rejects_missing_weight():
         assert 'EMA state mismatch' in str(exc)
     else:
         raise AssertionError('missing EMA weight must be rejected')
+
+def test_diagnostic_artifact_can_never_receive_headline_validity():
+    import importlib.util
+    script=Path(__file__).resolve().parents[1]/'scripts/evaluate_journal.py'
+    spec=importlib.util.spec_from_file_location('evaluate_journal_validity',script)
+    mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    assert mod._scientific_validity('diagnostic',True,True,True,False) == 'DIAGNOSTIC_ARTIFACT'
+    assert mod._scientific_validity('headline',True,True,True,False) == 'VALID_HEADLINE_PROTOCOL'

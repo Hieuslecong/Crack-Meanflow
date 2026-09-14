@@ -19,7 +19,7 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from crackmeanflow.common import config_hash, file_sha256, protocol_bundle_hash, source_tree_hash
-from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers
+from crackmeanflow.common.v3_provenance import active_v3_bundle_hash, nvidia_driver_info, paper_v3_worktree_blockers, verify_v3_provenance
 
 
 def _git(*args: str) -> str:
@@ -45,8 +45,16 @@ def main():
 
     protocol = yaml.safe_load(open(args.protocol, "r", encoding="utf-8"))
     canonical_cfg = yaml.safe_load(open(args.config, "r", encoding="utf-8"))
+    verified = verify_v3_provenance(
+        protocol_path=args.protocol,
+        config_path=args.config,
+        preflight_path=args.preflight,
+        dataset_name=args.dataset_name,
+        dataset_version=args.dataset_version,
+        research_total_optimizer_steps=21000,
+    )
     config_path = str(Path(args.config).as_posix())
-    arm = next((name for name, path in protocol["primary_arms"].items() if str(Path(path).as_posix()) == config_path), None)
+    arm = verified["arm"]
     if arm is None:
         raise RuntimeError("config is not a locked V3 primary arm")
     lock = protocol["config_locks"][arm]

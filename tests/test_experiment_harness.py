@@ -107,6 +107,16 @@ def test_runtime_profile_reports_stage_and_throughput():
     assert result["stages"]["forward"]["count"] == 1
 
 
+def test_runtime_profile_training_only_excludes_validation_and_checkpoint():
+    from crackmeanflow.common.experiment_harness import RuntimeProfile
+
+    profile = RuntimeProfile(device="cpu")
+    profile.stop_stage("train", elapsed_seconds=2.0)
+    profile.stop_stage("validation", elapsed_seconds=7.0)
+    profile.stop_stage("checkpoint", elapsed_seconds=11.0)
+    assert profile.finalize()["training_only_seconds"] == 2.0
+
+
 def test_paired_comparison_requires_matching_seeds_and_classifies_better():
     from crackmeanflow.common.experiment_harness import compare_paired_reports
 
