@@ -3,7 +3,9 @@ from __future__ import annotations
 import importlib
 
 import pytest
+import yaml
 
+from crackmeanflow.common.v3_provenance import active_v3_bundle_hash
 
 benchmark = importlib.import_module("scripts.benchmark_microbatch_v3")
 
@@ -69,3 +71,17 @@ def test_identity_is_diagnostic_and_records_partition_override():
         "effective_batch_size": 8,
     }
     assert identity["research_scheduler_total_steps"] == 21000
+
+
+def test_active_bundle_hash_is_path_form_invariant(tmp_path, monkeypatch):
+    protocol_path = tmp_path / "protocol.yaml"
+    config_path = tmp_path / "config.yaml"
+    protocol_path.write_text(
+        "primary_arms:\n  A2B_ENDPOINT: config.yaml\n", encoding="utf-8"
+    )
+    config_path.write_text("x: 1\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
+    assert active_v3_bundle_hash("protocol.yaml", protocol) == active_v3_bundle_hash(
+        str(protocol_path.resolve()), protocol
+    )

@@ -33,7 +33,8 @@ def active_v3_bundle_hash(protocol_path, protocol: dict) -> str:
     compatibility, but this active hash is not perturbed by edits to superseded
     V1/V2 protocol files.
     """
-    rows = [{"path": str(Path(protocol_path).as_posix()), "sha256": file_sha256(protocol_path)}]
+    protocol_path = Path(protocol_path).resolve()
+    rows = [{"path": str(protocol_path.as_posix()), "sha256": file_sha256(protocol_path)}]
     for arm, cfg_path in sorted(protocol["primary_arms"].items()):
         rows.append({"arm": arm, "path": str(Path(cfg_path).as_posix()), "sha256": file_sha256(cfg_path)})
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":")).encode("utf-8")
