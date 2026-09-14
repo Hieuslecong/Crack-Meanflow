@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from copy import deepcopy
 from pathlib import Path
 
 import yaml
@@ -60,6 +61,37 @@ def nvidia_driver_info() -> dict:
         return {"available": True, "gpus": rows}
     except Exception as exc:
         return {"available": False, "error": type(exc).__name__}
+
+
+def validate_fast_config_pair(base_cfg: dict, fast_cfg: dict, expected_effective_batch: int = 8) -> dict:
+    """Validate that FAST changes only the micro-batch execution partition."""
+    base = deepcopy(base_cfg)
+    fast = deepcopy(fast_cfg)
+    base_train = base.setdefault("train", {})
+    fast_train = fast.setdefault("train", {})
+    base_batch = int(base_train.get("batch_size", -1))
+    base_accum = int(base_train.get("grad_accum_steps", -1))
+    fast_batch = int(fast_train.get("batch_size", -1))
+    fast_accum = int(fast_train.get("grad_accum_steps", -1))
+    expected = int(expected_effective_batch)
+    if base_batch * base_accum != expected:
+        raise RuntimeError("base config does not have the locked effective batch")
+    if fast_batch < 1 or fast_accum < 1 or fast_batch * fast_accum != expected:
+        raise RuntimeError("FAST config effective batch must remain exactly locked")
+    base_train.pop("batch_size", None)
+    base_train.pop("grad_accum_steps", None)
+    fast_train.pop("batch_size", None)
+    fast_train.pop("grad_accum_steps", None)
+    if base != fast:
+        raise RuntimeError("FAST config changed fields beyond batch_size/grad_accum_steps")
+    return {
+        "base_batch_size": base_batch,
+        "base_grad_accum_steps": base_accum,
+        "fast_batch_size": fast_batch,
+        "fast_grad_accum_steps": fast_accum,
+        "effective_batch_size": fast_batch * fast_accum,
+        "scientific_semantics_unchanged": True,
+    }
 
 
 def verify_v3_provenance(
@@ -157,6 +189,118 @@ def verify_v3_provenance(
         raise RuntimeError("preflight dataset identity is missing")
     if actual_dataset_identity is not None and json.dumps(actual_dataset_identity, sort_keys=True, separators=(",", ":")) != json.dumps(expected_identity, sort_keys=True, separators=(",", ":")):
         raise RuntimeError("actual dataset identity does not match preflight dataset identity")
+    return {
+        "arm": arm,
+        "protocol": protocol,
+        "config": cfg,
+        "preflight": preflight,
+        "dataset_identity": expected_identity,
+        "research_total_optimizer_steps": horizon,
+        **current,
+    }
+
+
+def verify_v3_fast_provenance(
+    *,
+    protocol_path,
+    config_path,
+    preflight_path,
+    dataset_name: str,
+    dataset_version: str,
+    research_total_optimizer_steps: int,
+    diagnostic_stop_optimizer_steps: int | None = None,
+    actual_dataset_identity: dict | None = None,
+    root=None,
+) -> dict:
+    """Verify a versioned V3 FAST bundle with partition-only overrides."""
+    root = Path(root or Path(__file__).resolve().parents[2]).resolve()
+    protocol_path = Path(protocol_path).resolve()
+    config_path = Path(config_path).resolve()
+    preflight_path = Path(preflight_path).resolve()
+    if not preflight_path.is_file():
+        raise RuntimeError("V3 FAST preflight is missing")
+    try:
+        preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("V3 FAST preflight is unreadable") from exc
+    if preflight.get("schema") != "CRACKMEANFLOW_PROTOCOL_PREFLIGHT_V3_FAST" or preflight.get("status") != "PASS":
+        raise RuntimeError("V3 FAST preflight is not PASS")
+    protocol = yaml.safe_load(protocol_path.read_text(encoding="utf-8"))
+    if protocol.get("protocol_version") != "CRACKMEANFLOW_POST_REPAIR_PROTOCOL_V3":
+        raise RuntimeError("wrong active V3 protocol version")
+    if protocol.get("protocol_variant") != "FAST_PARTITION_ONLY":
+        raise RuntimeError("active protocol is not the V3 FAST partition-only variant")
+
+    blockers = paper_v3_worktree_blockers()
+    if blockers:
+        raise RuntimeError(f"paper-v3 worktree is not provenance-clean: {blockers}")
+
+    def resolved(path_value):
+        path = Path(path_value)
+        return (path if path.is_absolute() else root / path).resolve()
+
+    arm = next((name for name, path in protocol.get("primary_arms", {}).items() if resolved(path) == config_path), None)
+    if arm is None:
+        raise RuntimeError("config is not a locked V3 FAST primary arm")
+    lock = protocol["config_locks"][arm]
+    cfg = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    base_protocol_path = resolved(protocol["base_protocol"])
+    base_protocol = yaml.safe_load(base_protocol_path.read_text(encoding="utf-8"))
+    base_config_path = resolved(base_protocol["primary_arms"][arm])
+    base_cfg = yaml.safe_load(base_config_path.read_text(encoding="utf-8"))
+    validate_fast_config_pair(base_cfg, cfg, int(protocol["optimization"]["effective_batch_size"]))
+    if file_sha256(config_path) != lock.get("file_sha256") or config_hash(cfg) != lock.get("semantic_sha256"):
+        raise RuntimeError("V3 FAST config lock mismatch")
+    preflight_arm = (preflight.get("arms") or {}).get(arm)
+    if not isinstance(preflight_arm, dict):
+        raise RuntimeError("V3 FAST preflight locked arm record is missing")
+    if (
+        resolved(preflight_arm.get("config", "")) != config_path
+        or preflight_arm.get("config_file_sha256") != lock.get("file_sha256")
+        or preflight_arm.get("config_semantic_sha256") != lock.get("semantic_sha256")
+        or not isinstance(preflight_arm.get("checks"), dict)
+        or not all(preflight_arm["checks"].values())
+    ):
+        raise RuntimeError("V3 FAST preflight config lock does not match the active arm")
+
+    horizon = int(protocol["optimization"]["matched_optimizer_steps"])
+    if int(research_total_optimizer_steps) != horizon or horizon != 21000:
+        raise RuntimeError("V3 FAST research horizon must remain exactly 21000 optimizer steps")
+    if int(cfg.get("train", {}).get("max_optimizer_steps", -1)) != horizon:
+        raise RuntimeError("V3 FAST config research horizon does not match locked protocol")
+    if int(cfg.get("eval", {}).get("num_steps", -1)) != 1:
+        raise RuntimeError("V3 FAST primary execution requires NFE=1")
+    if diagnostic_stop_optimizer_steps is not None and not (0 < int(diagnostic_stop_optimizer_steps) < horizon):
+        raise RuntimeError("diagnostic stop must be positive and shorter than research horizon")
+    source_dataset = protocol["source_dataset"]
+    if str(dataset_name) != str(source_dataset["name"]) or str(dataset_version) != str(source_dataset["split_id"]):
+        raise RuntimeError("source dataset name/version does not match the locked V3 source")
+    expected_protocol_path = resolved(preflight.get("protocol", ""))
+    if expected_protocol_path != protocol_path:
+        raise RuntimeError("V3 FAST preflight protocol path does not match active protocol")
+    provenance = preflight.get("provenance") or {}
+    current = {
+        "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+        "source_tree_sha256": source_tree_hash(root),
+        "protocol_file_sha256": file_sha256(protocol_path),
+        "protocol_bundle_sha256_legacy_global": protocol_bundle_hash(root),
+        "protocol_bundle_sha256_v3_active": active_v3_bundle_hash(protocol_path, protocol),
+    }
+    labels = {
+        "commit": "commit",
+        "source_tree_sha256": "source tree",
+        "protocol_file_sha256": "protocol file",
+        "protocol_bundle_sha256_legacy_global": "legacy protocol bundle",
+        "protocol_bundle_sha256_v3_active": "active V3 FAST bundle",
+    }
+    for key, value in current.items():
+        if provenance.get(key) != value:
+            raise RuntimeError(f"preflight {labels[key]} does not match current execution")
+    expected_identity = preflight.get("dataset_identity")
+    if not isinstance(expected_identity, dict) or not expected_identity:
+        raise RuntimeError("V3 FAST preflight dataset identity is missing")
+    if actual_dataset_identity is not None and json.dumps(actual_dataset_identity, sort_keys=True, separators=(",", ":")) != json.dumps(expected_identity, sort_keys=True, separators=(",", ":")):
+        raise RuntimeError("actual dataset identity does not match V3 FAST preflight")
     return {
         "arm": arm,
         "protocol": protocol,

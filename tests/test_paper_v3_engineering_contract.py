@@ -15,6 +15,8 @@ SMOKE = ROOT / "scripts/smoke_preflight_v3.py"
 SMOKE_GATE = ROOT / "scripts/smoke_gate_v3.py"
 BRANCH_PROBE = ROOT / "scripts/branch_coverage_probe_v3.py"
 RESUME_PROBE = ROOT / "scripts/resume_equivalence_v3.py"
+FAST_BENCHMARK = ROOT / "scripts/benchmark_microbatch_v3.py"
+FAST_PREFLIGHT = ROOT / "scripts/protocol_preflight_v3_fast.py"
 
 
 def _load(path):
@@ -135,3 +137,19 @@ def test_branch_and_resume_gates_exist_and_are_diagnostic_only():
     assert "20_continuous_vs_10_checkpoint_restore_10" in resume
     assert '"canonical_partial_epoch_resume_supported": False' in resume
     assert '"paper_resume_policy": "epoch_boundary_only"' in resume
+
+
+def test_fast_preflight_exports_partition_only_validator():
+    source = FAST_PREFLIGHT.read_text(encoding="utf-8")
+    assert "validate_fast_config_pair" in source
+    assert "batch_size" in source
+    assert "grad_accum_steps" in source
+    assert "effective_batch" in source
+
+
+def test_fast_benchmark_contract_is_diagnostic_and_horizon_locked():
+    source = FAST_BENCHMARK.read_text(encoding="utf-8")
+    assert '"diagnostic_only": True' in source
+    assert '"research_metric_valid": False' in source
+    assert '"eligible_for_paper": False' in source
+    assert "research scheduler horizon must remain exactly 21000" in source
