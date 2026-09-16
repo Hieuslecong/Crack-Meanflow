@@ -1,0 +1,23 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_CAUSAL_GATE_V1",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "audited_option_c_commit": "eb1c7ef76c70b33d4f54d76bd1d10411477fff00",
+  "status": "PASS",
+  "representation": "centerline_radius",
+  "checks": {
+    "zero_centerline_collapses_mask": "PASS",
+    "centerline_translation_moves_rendered_support": "PASS",
+    "radius_monotonically_increases_area": "PASS",
+    "mask_loss_centerline_gradient_finite_nonzero": "PASS",
+    "mask_loss_radius_gradient_finite_nonzero": "PASS",
+    "empty_geometry_stable_finite": "PASS",
+    "single_line_reconstruction": "PASS",
+    "y_junction_reconstruction": "PASS",
+    "x_junction_reconstruction": "PASS"
+  },
+  "evidence": [
+    "tests/test_option_c_causality.py",
+    "crackmeanflow/journal/geometry/rasterizer.py"
+  ],
+  "verdict": "J2 causal geometry contract is sufficient to proceed to J3 engineering validation."
+}

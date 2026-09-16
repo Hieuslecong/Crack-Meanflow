@@ -1,0 +1,20 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_GIC_GATE_V1",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "audited_option_c_commit": "eb1c7ef76c70b33d4f54d76bd1d10411477fff00",
+  "status": "PASS",
+  "checks": {
+    "identical_states_near_zero": "PASS",
+    "center_perturbation_activates_center_term": "PASS",
+    "center_perturbation_activates_mask_term": "PASS",
+    "radius_perturbation_activates_radius_term": "PASS",
+    "radius_perturbation_activates_rendered_mask_term": "PASS",
+    "gic_finite_and_differentiable": "PASS",
+    "rendered_mask_support_not_skeleton_only": "PASS_BY_IMPLEMENTATION_AUDIT"
+  },
+  "evidence": [
+    "tests/test_option_c_gic.py",
+    "crackmeanflow/journal/losses/geometry_interval_consistency.py"
+  ],
+  "verdict": "J3 geometry-projected consistency contract passes CPU engineering validation."
+}

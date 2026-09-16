@@ -1,0 +1,24 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_ENDPOINT_GATE_V1",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "audited_option_c_commit": "eb1c7ef76c70b33d4f54d76bd1d10411477fff00",
+  "status": "PASS",
+  "block_size": 1000,
+  "configured_fm_probability": 0.50,
+  "configured_endpoint_probability": 0.15,
+  "expected_counts": {
+    "fm": 500,
+    "endpoint": 150,
+    "interval": 350
+  },
+  "checks": {
+    "exact_rate_full_block": "PASS",
+    "endpoint_fm_disjoint": "PASS",
+    "rates_repeat_across_multiple_blocks": "PASS"
+  },
+  "evidence": [
+    "tests/test_option_c_endpoint.py",
+    "crackmeanflow/journal/flow/improved_meanflow.py"
+  ],
+  "verdict": "J4 endpoint exposure schedule is isolated and deterministic."
+}
