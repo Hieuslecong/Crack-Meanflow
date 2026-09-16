@@ -65,4 +65,5 @@ def geometry_centerline_metrics(pred_center_prob,gt_center_binary,pred_radius=No
                 pr=pred_radius[bi,0].detach().cpu().numpy();gr=gt_radius[bi,0].detach().cpu().numpy();matched=pyx[idx];rerrs.append(float(np.mean(np.abs(pr[matched[:,0],matched[:,1]]-gr[gyx[:,0],gyx[:,1]]))))
             else:rerrs.append(float('nan'))
         lp=skeleton_length_px(p[bi:bi+1]);lg=skeleton_length_px(g[bi:bi+1]);lerrs.append(abs(lp-lg)/max(lg,1.))
-    return {'centerline_assd_px':float(np.mean(assd)),'edt_radius_mae_px':float(np.nanmean(rerrs)) if not np.all(np.isnan(rerrs)) else float('nan'),'skeleton_length_rel_error':float(np.mean(lerrs))}
+    radius_mae=float(np.nanmean(rerrs)) if not np.all(np.isnan(rerrs)) else float('nan')
+    return {'centerline_assd_px':float(np.mean(assd)),'radius_mae_px':radius_mae,'edt_radius_mae_px':radius_mae,'skeleton_length_rel_error':float(np.mean(lerrs))}

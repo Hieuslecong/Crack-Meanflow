@@ -18,12 +18,7 @@ def _stratified_mask(batch,fraction,offset,device):
     return torch.floor((idx+1)*fraction)>torch.floor(idx*fraction)
 
 def _independent_stratified_mask(batch,fraction,offset,device,stream='gic',block=1000):
-    """Deterministic exact-rate block stratification with decorrelated streams.
-
-    This avoids the nested-period aliasing of reusing `_stratified_mask` for FM,
-    GIC and endpoint selection (e.g. p=.25 becomes a strict subset of p=.50).
-    Canonical probabilities .25 and .15 are represented exactly in 1000-sample blocks.
-    """
+    """Deterministic exact-rate block stratification with decorrelated streams."""
     fraction=float(fraction)
     if fraction<=0:return torch.zeros(batch,dtype=torch.bool,device=device)
     if fraction>=1:return torch.ones(batch,dtype=torch.bool,device=device)
@@ -38,12 +33,7 @@ def _independent_stratified_mask(batch,fraction,offset,device,stream='gic',block
 
 
 def _disjoint_stratified_schedule(batch,fm_fraction,endpoint_fraction,offset,device,block=1000):
-    """Deterministic disjoint endpoint/FM/interval schedule.
-
-    Endpoint-aware ablations must not silently reduce the configured FM fraction.
-    In each full block this assigns exactly endpoint_fraction to deployment
-    endpoint, fm_fraction to r=t, and the remainder to interval samples.
-    """
+    """Deterministic disjoint endpoint/FM/interval schedule."""
     fm_fraction=float(fm_fraction); endpoint_fraction=float(endpoint_fraction)
     if fm_fraction<0 or endpoint_fraction<0 or fm_fraction+endpoint_fraction>1+1e-12:
         raise ValueError('fm_fraction and endpoint_fraction must be >=0 and sum to <=1')
@@ -84,8 +74,8 @@ class ImprovedMeanFlowStateLoss(nn.Module):
         return total,{'total_loss':float(total.detach()),'imf_u_loss':float(lu.detach()),'imf_v_loss':float(lv.detach()),'clean_loss':float(clean_loss.detach()),'fm_count':int(fm.sum().item()),'gic_active_samples':0,'gic_active_batches':0,'near_deployment_count':int(((t>=.95)&(r<=.05)).sum().item()),'exact_deployment_count':int(endpoint.sum().item())}
 
 class ImprovedMeanFlowGeometryLoss(nn.Module):
-    def __init__(self,data_proportion=.5,time_mu=-.4,time_sigma=1.,norm_p=1.,norm_eps=.01,geometry_weight=.5,mask_weight=.5,radius_weight=1.,gic_weight=.1,gic_probability=.25,endpoint_probability=0.0,max_radius=16.,rasterizer=None,fm_sampling='stratified',gic_sampling='stratified',endpoint_sampling='stratified'):
-        super().__init__();self.data_proportion=float(data_proportion);self.time_mu=float(time_mu);self.time_sigma=float(time_sigma);self.norm_p=float(norm_p);self.norm_eps=float(norm_eps);self.geometry_weight=float(geometry_weight);self.mask_weight=float(mask_weight);self.radius_weight=float(radius_weight);self.gic_weight=float(gic_weight);self.gic_probability=float(gic_probability);self.max_radius=float(max_radius);self.rasterizer=rasterizer;self.fm_sampling=str(fm_sampling);self.gic_sampling=str(gic_sampling);self.endpoint_probability=float(endpoint_probability);self.endpoint_sampling=str(endpoint_sampling)
+    def __init__(self,data_proportion=.5,time_mu=-.4,time_sigma=1.,norm_p=1.,norm_eps=.01,geometry_weight=.5,mask_weight=.5,radius_weight=1.,gic_weight=.1,gic_probability=.25,gic_center_weight=1.0,gic_radius_weight=.5,gic_mask_weight=.5,endpoint_probability=0.0,max_radius=16.,rasterizer=None,fm_sampling='stratified',gic_sampling='stratified',endpoint_sampling='stratified'):
+        super().__init__();self.data_proportion=float(data_proportion);self.time_mu=float(time_mu);self.time_sigma=float(time_sigma);self.norm_p=float(norm_p);self.norm_eps=float(norm_eps);self.geometry_weight=float(geometry_weight);self.mask_weight=float(mask_weight);self.radius_weight=float(radius_weight);self.gic_weight=float(gic_weight);self.gic_probability=float(gic_probability);self.gic_center_weight=float(gic_center_weight);self.gic_radius_weight=float(gic_radius_weight);self.gic_mask_weight=float(gic_mask_weight);self.max_radius=float(max_radius);self.rasterizer=rasterizer;self.fm_sampling=str(fm_sampling);self.gic_sampling=str(gic_sampling);self.endpoint_probability=float(endpoint_probability);self.endpoint_sampling=str(endpoint_sampling)
     def sample_tr(self,b,device,sample_offset=0):
         n=torch.randn(2,b,device=device)*self.time_sigma+self.time_mu;a,bb=torch.sigmoid(n[0]),torch.sigmoid(n[1]);t=torch.maximum(a,bb);r=torch.minimum(a,bb)
         if self.endpoint_probability>0 and self.endpoint_sampling=='stratified_disjoint':
@@ -117,7 +107,7 @@ class ImprovedMeanFlowGeometryLoss(nn.Module):
             pred_mask=self.rasterizer(clean);gt_mask=((mask_gt+1)*.5).clamp(0,1) if mask_gt is not None else self.rasterizer(g0).detach();mask_loss=_bce_dice(pred_mask,gt_mask);total=total+self.mask_weight*mask_loss
         gic=g0.new_tensor(0.);parts={};gic_mask=self._gic_mask(b,device,sample_offset) if self.gic_weight>0 and self.rasterizer is not None else torch.zeros(b,dtype=torch.bool,device=device);gic_count=int(gic_mask.sum().item())
         if gic_count:
-            gic,parts=geometry_interval_consistency(model,z[gic_mask],r[gic_mask],t[gic_mask],image[gic_mask],self.rasterizer);gic_scale=float(gic_count)/float(b);total=total+self.gic_weight*gic*gic_scale;parts['gic_active_fraction']=g0.new_tensor(gic_scale)
+            gic,parts=geometry_interval_consistency(model,z[gic_mask],r[gic_mask],t[gic_mask],image[gic_mask],self.rasterizer,center_weight=self.gic_center_weight,radius_weight=self.gic_radius_weight,mask_weight=self.gic_mask_weight);gic_scale=float(gic_count)/float(b);total=total+self.gic_weight*gic*gic_scale;parts['gic_active_fraction']=g0.new_tensor(gic_scale)
         if not torch.isfinite(total):raise RuntimeError('non-finite GeoCrack-iMF loss')
         near_deploy=((t>=.95)&(r<=.05)).sum(); exact_deploy=endpoint.sum()
         logs={'total_loss':total,'imf_u_loss':loss_u,'imf_v_loss':loss_v,'geometry_loss':geom,'centerline_loss':c_loss,'field_loss':r_loss,'radius_loss':r_loss,'mask_loss':mask_loss,'gic_loss':gic,'fm_count':fm.sum(),'gic_active_samples':g0.new_tensor(gic_count),'gic_active_batches':g0.new_tensor(1 if gic_count else 0),'batch_size':g0.new_tensor(b),'t_mean':t.mean(),'r_mean':r.mean(),'gap_mean':(t-r).mean(),'near_deployment_count':near_deploy,'exact_deployment_count':exact_deploy};logs.update(parts);return total,{k:float(vv.detach()) for k,vv in logs.items()}

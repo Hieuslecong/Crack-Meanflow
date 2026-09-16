@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from crackmeanflow.journal.geometry.rasterizer import GeometryRasterizer
+from crackmeanflow.journal.models.geocrack_imf import GeoCrackIMFModel
 
 
 def _state(center, radius, max_radius=4.0):
@@ -28,6 +29,18 @@ def test_mask_loss_has_finite_nonzero_center_and_radius_gradients():
     loss=F.binary_cross_entropy(pred.clamp(1e-6,1-1e-6),target);loss.backward()
     assert center_logits.grad is not None and torch.isfinite(center_logits.grad).all() and float(center_logits.grad.abs().sum())>0
     assert radius_logits.grad is not None and torch.isfinite(radius_logits.grad).all() and float(radius_logits.grad.abs().sum())>0
+
+def test_mask_loss_backprop_reaches_geocrack_output_head_channels():
+    torch.manual_seed(0)
+    model=GeoCrackIMFModel(img_size=16,patch=8,size='T',geometry_ch=2,local_refine=True,background_init=-0.5)
+    rast=GeometryRasterizer(max_radius=4,bins=5,temperature=.5,representation='centerline_radius')
+    z=torch.zeros(1,2,16,16);image=torch.randn(1,3,16,16);t=torch.tensor([.8]);r=torch.tensor([.2])
+    clean,_=model.clean_predictions(z,t,r,image);pred=rast(clean);target=torch.zeros_like(pred);target[:,:,4:12,4:12]=1
+    F.binary_cross_entropy(pred.clamp(1e-6,1-1e-6),target).backward()
+    grad=model.clean_u_local.weight.grad
+    assert grad is not None and torch.isfinite(grad).all()
+    assert float(grad[0].abs().sum())>0, 'mask loss must reach centerline output-head parameters'
+    assert float(grad[1].abs().sum())>0, 'mask loss must reach radius output-head parameters'
 
 def test_empty_geometry_is_stable_and_finite():
     rast=GeometryRasterizer(max_radius=4,bins=5,representation='centerline_radius');c=torch.zeros(2,1,19,19);r=torch.zeros_like(c);m=rast(_state(c,r,4));assert torch.isfinite(m).all() and float(m.abs().sum())==0.0

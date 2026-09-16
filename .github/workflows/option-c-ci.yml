@@ -20,6 +20,8 @@ jobs:
           cache: pip
       - name: Install audit dependencies
         run: python -m pip install -r requirements-dev.txt
+      - name: Git whitespace check
+        run: git diff --check HEAD^ HEAD
       - name: Compile all Python
         run: python -m compileall -q crackmeanflow scripts tests
       - name: Option-C protocol preflight

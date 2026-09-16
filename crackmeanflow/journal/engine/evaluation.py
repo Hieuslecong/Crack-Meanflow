@@ -13,7 +13,7 @@ def collect_geometry(model,loader,device,rasterizer,seed=0):
         geom,prob=sample_geometry_one_step(model,z,img,rasterizer); rows.append((geom.detach().cpu(),prob.detach().cpu(),gt_pm1.detach().cpu()))
     return rows
 
-def aggregate_geometry(collected,threshold,max_radius,representation,distance_encoding='linear',include_geometry=True,include_structural=True):
+def aggregate_geometry(collected,threshold,max_radius,representation,distance_encoding='linear',include_geometry=True,include_structural=True,compute_auprc=True):
     tp=fp=fn=tn=0.; cls=[]; bfs=[]; geoms=[]; per=[]; per_pos=[];gt_pos=pred_pos=total_px=0.;empty_gt=empty_gt_fp=0
     for geom,prob,gt_pm1 in collected:
         gt=((gt_pm1+1)*.5); pred=(prob>float(threshold)).float(); m=compute_segmentation_metrics(pred,gt); tp+=m['tp'];fp+=m['fp'];fn+=m['fn'];tn+=m['tn']
@@ -34,13 +34,15 @@ def aggregate_geometry(collected,threshold,max_radius,representation,distance_en
         pr=tp/max(tp+fp,1e-12); re=tp/max(tp+fn,1e-12); f1=2*pr*re/max(pr+re,1e-12); iou=tp/max(tp+fp+fn,1e-12)
     macro=lambda key:float(np.mean([x[key] for x in per])) if per else float('nan')
     macro_pos=lambda key:float(np.mean([x[key] for x in per_pos])) if per_pos else float('nan')
-    score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in collected]
-    out={'threshold':float(threshold),'f1':f1,'dice':f1,'iou':iou,'precision':pr,'recall':re,'auprc':binary_average_precision_from_pairs(score_gt),'f1_macro_image':macro('f1'),'iou_macro_image':macro('iou'),'precision_macro_image':macro('precision'),'recall_macro_image':macro('recall'),'f1_macro_positive_image':macro_pos('f1'),'iou_macro_positive_image':macro_pos('iou'),'cldice':float(np.mean(cls)) if cls else float('nan'),'boundary_f1':float(np.mean(bfs)) if bfs else float('nan'),'gt_foreground_ratio':gt_pos/max(total_px,1.0),'pred_foreground_ratio':pred_pos/max(total_px,1.0),'empty_gt_images':empty_gt,'empty_gt_false_positive_images':empty_gt_fp,'empty_gt_false_positive_rate':empty_gt_fp/max(empty_gt,1),'metric_aggregation':'f1/iou/precision/recall are global pixel-micro; auprc is exact global pixel average precision from continuous scores; *_macro_image are arithmetic means of per-image metrics'}
+    out={'threshold':float(threshold),'f1':f1,'dice':f1,'iou':iou,'precision':pr,'recall':re,'f1_macro_image':macro('f1'),'iou_macro_image':macro('iou'),'precision_macro_image':macro('precision'),'recall_macro_image':macro('recall'),'f1_macro_positive_image':macro_pos('f1'),'iou_macro_positive_image':macro_pos('iou'),'cldice':float(np.mean(cls)) if cls else float('nan'),'boundary_f1':float(np.mean(bfs)) if bfs else float('nan'),'gt_foreground_ratio':gt_pos/max(total_px,1.0),'pred_foreground_ratio':pred_pos/max(total_px,1.0),'empty_gt_images':empty_gt,'empty_gt_false_positive_images':empty_gt_fp,'empty_gt_false_positive_rate':empty_gt_fp/max(empty_gt,1),'metric_aggregation':'f1/iou/precision/recall are global pixel-micro; *_macro_image are arithmetic means of per-image metrics'}
+    if compute_auprc:
+        score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in collected];out['auprc']=binary_average_precision_from_pairs(score_gt);out['metric_aggregation']+='; auprc is exact global pixel average precision from continuous scores'
+    else:out['auprc_skipped_for_checkpoint_selection']=True
     for k in geoms[0] if geoms else []: out[k]=float(np.mean([g[k] for g in geoms]))
     return out
 
-def calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed=0,max_radius=16.):
-    coll=collect_geometry(model,loader,device,rasterizer,seed); score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in coll]; rows=_micro_threshold_sweep_from_score_gt(score_gt,thresholds); best=max(rows,key=lambda t:rows[t]['f1']); rows[best]=aggregate_geometry(coll,best,max_radius,rasterizer.representation,rasterizer.distance_encoding,include_geometry=True,include_structural=True); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
+def calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed=0,max_radius=16.,compute_auprc=True):
+    coll=collect_geometry(model,loader,device,rasterizer,seed); score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in coll]; rows=_micro_threshold_sweep_from_score_gt(score_gt,thresholds); best=max(rows,key=lambda t:rows[t]['f1']); rows[best]=aggregate_geometry(coll,best,max_radius,rasterizer.representation,rasterizer.distance_encoding,include_geometry=True,include_structural=True,compute_auprc=compute_auprc); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
 
 @torch.no_grad()
 def evaluate_geometry_with_frozen_threshold(model,loader,device,rasterizer,threshold,seed=0,max_radius=16.,collect_per_image=False):
