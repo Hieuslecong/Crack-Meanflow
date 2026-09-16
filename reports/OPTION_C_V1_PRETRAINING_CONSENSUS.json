@@ -1,15 +1,23 @@
 {
-  "schema": "CRACKMEANFLOW_OPTION_C_PRETRAINING_CONSENSUS_V1",
+  "schema": "CRACKMEANFLOW_OPTION_C_PRETRAINING_CONSENSUS_V2",
   "branch": "journal/option-c-v1",
-  "audited_code_commit": "c572393e372f26e979cca05970c9f62aaff8fd2c",
+  "audited_code_protocol_commit": "976f528203a01929476eff6a5086fae5eef33796",
   "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
   "ci": {
-    "workflow_run_id": 35078077454,
+    "workflow_run_id": 35079848436,
     "conclusion": "success",
     "whitespace": "PASS",
     "compileall": "PASS",
     "protocol_preflight_v2": "PASS",
-    "pytest": "174 passed, 19 warnings"
+    "pytest": "175 passed, 19 warnings"
+  },
+  "hardening": {
+    "option_c_specific_gpu_preflight": true,
+    "gpu_preflight_requires_gic_branch_when_enabled": true,
+    "gpu_preflight_requires_endpoint_branch_for_j4": true,
+    "runtime_microbatch_override_forbidden": true,
+    "canonical_runbook": "docs/OPTION_C_V1_RUNBOOK.md",
+    "legacy_v3_v4_runbook_not_canonical_for_option_c": true
   },
   "reviewers": {
     "R1_scientific_method": "PASS",
@@ -17,13 +25,17 @@
     "R3_numerical_stability": "PASS_FOR_PRE_GPU_FREEZE",
     "R4_reproducibility": "PASS",
     "R5_experimental_design": "PASS",
-    "R6_gpu_runtime_safety": "PASS_FOR_GPU_SMOKE",
+    "R6_gpu_runtime_safety": "PASS_FOR_GPU_PREFLIGHT",
     "R7_journal_review": "PASS"
   },
-  "unanimous_pretraining_code_consensus": true,
+  "unanimous_pre_gpu_code_protocol_consensus": true,
+  "known_cpu_code_blockers": [],
+  "known_protocol_blockers": [],
   "target_data_accessed": false,
-  "ready_for_20_step_gpu_smoke": true,
-  "ready_for_100_200_step_benchmark": false,
-  "ready_for_4125_plus_training": false,
-  "next_action": "Run J0-J4 20-step RTX3090 engineering smoke."
+  "ready_for_option_c_gpu_preflight": true,
+  "ready_for_20_step_gpu_smoke": false,
+  "ready_for_4125_source_screen": false,
+  "ready_for_21000_headline": false,
+  "runtime_microbatch_override_allowed": false,
+  "next_action": "Run scripts/gpu_preflight_option_c.py on the actual RTX3090; only after PASS run canonical 20-step J0-J4 CFD diagnostics."
 }
