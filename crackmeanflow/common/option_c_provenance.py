@@ -46,6 +46,7 @@ def validate_option_c_config(cfg,variant):
     if cfg.get('track')!='journal':errors.append('all Option-C variants must use track=journal')
     if cfg.get('backbone')!=exp['backbone']:errors.append('backbone mismatch')
     if 'max_optimizer_steps' in train:errors.append('legacy max_optimizer_steps is forbidden in Option-C configs')
+    if 'runtime_batch_override' in train:errors.append('runtime microbatch override is forbidden for OPTION_C_V1; scientific and diagnostic Option-C runs must use the canonical YAML partition')
     if int(train.get('batch_size',0))*int(train.get('grad_accum_steps',0))!=8:errors.append('effective batch must be 8')
     if int(train.get('research_total_steps',0))!=21000:errors.append('research_total_steps must be 21000')
     if tuple(int(x) for x in train.get('milestone_steps',[]))!=CANONICAL_MILESTONES:errors.append('milestone_steps mismatch')
