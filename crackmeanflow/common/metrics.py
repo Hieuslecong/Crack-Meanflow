@@ -6,6 +6,29 @@ from skimage.morphology import skeletonize
 
 def _bin(x):return (x.float()>.5).float()
 def _scalar(x):return float(x.detach().cpu())
+
+def binary_average_precision(scores,mask_gt):
+    """Exact pixel-level average precision from continuous scores with tie grouping."""
+    s=np.asarray(scores.detach().cpu(),dtype=np.float64).reshape(-1)
+    g=np.asarray(mask_gt.detach().cpu(),dtype=np.float64).reshape(-1)>.5
+    if s.size!=g.size: raise ValueError('score/GT size mismatch for average precision')
+    npos=int(g.sum())
+    if npos==0:return 0.0
+    order=np.argsort(-s,kind='mergesort');s=s[order];g=g[order]
+    tp=np.cumsum(g,dtype=np.float64);fp=np.cumsum(~g,dtype=np.float64)
+    ends=np.r_[np.flatnonzero(np.diff(s)!=0),s.size-1]
+    tp=tp[ends];fp=fp[ends]
+    precision=tp/np.maximum(tp+fp,1.0);recall=tp/float(npos)
+    delta=np.diff(np.r_[0.0,recall])
+    return float(np.sum(delta*precision))
+
+def binary_average_precision_from_pairs(score_gt_pairs):
+    scores=[];targets=[]
+    for score,gt in score_gt_pairs:
+        scores.append(score.detach().cpu().float().reshape(-1));targets.append(gt.detach().cpu().reshape(-1))
+    if not scores:return float('nan')
+    return binary_average_precision(torch.cat(scores),torch.cat(targets))
+
 def compute_segmentation_metrics(pred_binary,mask_gt,eps=1e-7):
     p=_bin(pred_binary).view(-1);g=_bin(mask_gt).view(-1);tp=(p*g).sum();fp=(p*(1-g)).sum();fn=((1-p)*g).sum();tn=((1-p)*(1-g)).sum()
     if (g.sum()==0) and (p.sum()==0):return {k:1. for k in ['iou','dice','f1','precision','recall','accuracy']}|{'tp':0.,'fp':0.,'fn':0.,'tn':_scalar(tn)}
