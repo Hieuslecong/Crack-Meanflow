@@ -1,0 +1,35 @@
+protocol_id: OPTION_C_V1
+base_v4_commit: f873ec2351dbd07cacd84e7ee7394a9bd5527b07
+source_branch: journal/option-c-v1
+source_dataset:
+  name: CFD
+  split_id: CFD_FROZEN_HISTORICAL_V1
+  train_samples: 6606
+  val_samples: 1447
+  test_samples: 1384
+training:
+  research_scheduler_total_steps: 21000
+  warmup_optimizer_steps: 8250
+  effective_batch_size: 8
+  nfe: 1
+  source_checkpoints: [4125, 8250, 12375, 16500, 21000]
+variants:
+  J0: {state: direct_mask, causal_mask: false, gic: false, endpoint: false}
+  J1: {state: centerline_edt, causal_mask: false, gic: false, endpoint: false}
+  J2: {state: centerline_radius, causal_mask: true, gic: false, endpoint: false}
+  J3: {state: centerline_radius, causal_mask: true, gic: true, endpoint: false}
+  J4: {state: centerline_radius, causal_mask: true, gic: true, endpoint: true}
+comparisons:
+  primary: Jfinal-J0
+  causal: J2-J1
+  gic: J3-J2
+  endpoint: J4-J3
+metrics:
+  primary_ood: OOD_MEAN_F1
+  structural_secondary: OOD_MEAN_CLDICE
+  required: [f1, iou, precision, recall, auprc, cldice, boundary_f1, centerline_assd_px, edt_radius_mae_px, skeleton_length_rel_error]
+target_access:
+  development_ood: [GAPS384, OmniCrack30k_repartitioned_v013_holdout]
+  target_tuning_allowed: false
+  target_metrics_seen_before_lock: false
+  final_untouched_external_dataset: UNSELECTED_AND_CLOSED
