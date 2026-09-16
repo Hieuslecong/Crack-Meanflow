@@ -1,4 +1,5 @@
 from pathlib import Path
+import copy
 import yaml
 from crackmeanflow.common.option_c_provenance import validate_option_c_config,validate_option_c_ladder,option_c_design_lock_sha256
 from crackmeanflow.common.option_c_schedule import resolve_option_c_budget,milestone_steps_from_config,CANONICAL_MILESTONE_STEPS
@@ -28,3 +29,10 @@ def test_milestones_are_exactly_preregistered():
 
 def test_design_lock_is_bound_from_protocol_directory():
     assert len(option_c_design_lock_sha256(ROOT))==64
+
+def test_runtime_microbatch_override_is_forbidden_for_option_c():
+    cfg=copy.deepcopy(_configs()['J2'])
+    cfg['train']['runtime_batch_override']={'original_batch_size':2,'original_grad_accum_steps':4,'effective_batch_size_preserved':True}
+    try:validate_option_c_config(cfg,'J2')
+    except ValueError as exc:assert 'runtime microbatch override is forbidden' in str(exc)
+    else:raise AssertionError('Option-C runtime microbatch override must fail closed')
