@@ -78,8 +78,8 @@ def _select_checkpoint_metric(cfg,model,loader,device,rasterizer):
     if not seeds or len(seeds)!=len(set(seeds)): raise RuntimeError('checkpoint_selection_seeds must be non-empty and unique')
     thresholds=resolve_thresholds(evcfg,final=bool(evcfg.get('checkpoint_use_final_threshold_grid',False)));sweeps=[]
     for seed in seeds:
-        if cfg['backbone']=='geocrack_imf':sweep,_=calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed,cfg['model'].get('max_radius',16),compute_auprc=False)
-        else:sweep,_=calibrate_threshold_on_validation(model,loader,device,crack_meanflow_sampler,thresholds,1,seed,evcfg.get('cfg_scale',1.0),compute_auprc=False)
+        if cfg['backbone']=='geocrack_imf':sweep,_=calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed,cfg['model'].get('max_radius',16),compute_auprc=False,full_metrics=False)
+        else:sweep,_=calibrate_threshold_on_validation(model,loader,device,crack_meanflow_sampler,thresholds,1,seed,evcfg.get('cfg_scale',1.0),compute_auprc=False,include_structural=False)
         sweeps.append(sweep)
     mean_f1={float(t):float(np.mean([float(sw[float(t)]['f1']) for sw in sweeps])) for t in thresholds};best_value=max(mean_f1.values()); th=min(t for t in sorted(mean_f1) if mean_f1[t]==best_value)
     return {'f1':mean_f1[th],'per_seed_f1':[float(sw[th]['f1']) for sw in sweeps],'selection_seeds':seeds},float(th)

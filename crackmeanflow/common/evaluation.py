@@ -70,8 +70,8 @@ def _micro_threshold_sweep_from_score_gt(score_gt_pairs, thresholds):
         rows[t]={'threshold':t,'f1':f1,'dice':f1,'iou':iou,'precision':pr,'recall':re,'tp':tp,'fp':fp,'fn':fn,'tn':tn,'calibration_mode':'exact_bucketized_pixel_micro'}
     return rows
 
-def calibrate_threshold_on_validation(model, loader, device, sampler, thresholds, num_steps=1, seed=0, cfg_scale=1.0, compute_auprc=True):
-    coll=_collect(model,loader,device,sampler,num_steps,seed,cfg_scale); rows=_micro_threshold_sweep_from_score_gt(coll,thresholds); best=max(rows,key=lambda t: rows[t]['f1']); rows[best]=_aggregate(coll,float(best),include_structural=True,compute_auprc=compute_auprc); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
+def calibrate_threshold_on_validation(model, loader, device, sampler, thresholds, num_steps=1, seed=0, cfg_scale=1.0, compute_auprc=True, include_structural=True):
+    coll=_collect(model,loader,device,sampler,num_steps,seed,cfg_scale); rows=_micro_threshold_sweep_from_score_gt(coll,thresholds); best=max(rows,key=lambda t: rows[t]['f1']); rows[best]=_aggregate(coll,float(best),include_structural=include_structural,compute_auprc=compute_auprc); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
 
 @torch.no_grad()
 def evaluate_with_threshold(model, loader, device, sampler, threshold, num_steps=1, seed=0, cfg_scale=1.0, collect_per_image=False):

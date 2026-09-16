@@ -41,8 +41,8 @@ def aggregate_geometry(collected,threshold,max_radius,representation,distance_en
     for k in geoms[0] if geoms else []: out[k]=float(np.mean([g[k] for g in geoms]))
     return out
 
-def calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed=0,max_radius=16.,compute_auprc=True):
-    coll=collect_geometry(model,loader,device,rasterizer,seed); score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in coll]; rows=_micro_threshold_sweep_from_score_gt(score_gt,thresholds); best=max(rows,key=lambda t:rows[t]['f1']); rows[best]=aggregate_geometry(coll,best,max_radius,rasterizer.representation,rasterizer.distance_encoding,include_geometry=True,include_structural=True,compute_auprc=compute_auprc); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
+def calibrate_geometry_threshold_on_validation(model,loader,device,rasterizer,thresholds,seed=0,max_radius=16.,compute_auprc=True,full_metrics=True):
+    coll=collect_geometry(model,loader,device,rasterizer,seed); score_gt=[(prob,((gt_pm1+1)*.5)) for _,prob,gt_pm1 in coll]; rows=_micro_threshold_sweep_from_score_gt(score_gt,thresholds); best=max(rows,key=lambda t:rows[t]['f1']); rows[best]=aggregate_geometry(coll,best,max_radius,rasterizer.representation,rasterizer.distance_encoding,include_geometry=full_metrics,include_structural=full_metrics,compute_auprc=compute_auprc); rows[best]['calibration_mode']='exact_bucketized_pixel_micro_then_full_best_threshold'; return rows,best
 
 @torch.no_grad()
 def evaluate_geometry_with_frozen_threshold(model,loader,device,rasterizer,threshold,seed=0,max_radius=16.,collect_per_image=False):
