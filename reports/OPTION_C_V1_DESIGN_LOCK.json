@@ -1,0 +1,20 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_DESIGN_LOCK_V1",
+  "protocol_id": "OPTION_C_V1",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "variants": {
+    "J0": "direct-mask iMF; GIC off; endpoint off",
+    "J1": "centerline + dense EDT; non-causal final mask; GIC off; endpoint off",
+    "J2": "causal centerline + local radius -> differentiable rasterizer -> final mask; GIC off; endpoint off",
+    "J3": "J2 + geometry-projected interval consistency",
+    "J4": "J3 + disjoint endpoint/deployment exposure"
+  },
+  "comparisons": {"primary": "Jfinal-J0", "causal": "J2-J1", "gic": "J3-J2", "endpoint": "J4-J3"},
+  "primary_ood_metric": "mean F1 across development OOD domains",
+  "structural_metrics": ["clDice", "boundary F1", "centerline ASSD", "radius MAE", "skeleton length error"],
+  "nfe": 1,
+  "research_scheduler_total_steps": 21000,
+  "warmup_optimizer_steps": 8250,
+  "effective_batch_size": 8,
+  "target_tuning_allowed": false
+}
