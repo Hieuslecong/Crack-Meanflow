@@ -1,146 +1,115 @@
-# Crack-Meanflow — Clean Paper-Grade Research Branch
+# Crack-Meanflow — Option-C V1 Journal Branch
 
-This branch is the **single canonical codebase** for the current Crack-Meanflow research program. It intentionally removes historical code versions, duplicated configs, old experiment reports, checkpoints, datasets, local packaging artifacts, and legacy root modules that could cause the wrong implementation to be trained.
+This branch is the active journal-development branch for **OPTION_C_V1**.
 
-## Research scope
-
-The repository supports two locked research tracks:
-
-### Conference — CrackMeanFlow
+## Canonical Option-C ladder
 
 ```text
-RGB crack image
-→ Conditional MeanFlow
-→ U-Net field model
-→ direct mask state
-→ one-step prediction
-NFE = 1
+J0  direct-mask iMF control
+J1  centerline-EDT noncausal control
+J2  causal centerline-radius representation
+J3  J2 + geometry-projected consistency
+J4  J3 + endpoint exposure
 ```
 
-Canonical config:
+Canonical configs:
 
 ```text
-configs/conference/crackmeanflow_unet.yaml
+configs/option_c_v1/j0_direct_mask.yaml
+configs/option_c_v1/j1_centerline_edt_noncausal.yaml
+configs/option_c_v1/j2_centerline_radius_causal.yaml
+configs/option_c_v1/j3_centerline_radius_gic.yaml
+configs/option_c_v1/j4_centerline_radius_gic_endpoint.yaml
 ```
 
-### Journal — GeoCrack-iMF
+The old A5/V3/V4 configs and scripts remain only for historical reproducibility and comparison. They are **not** the canonical Option-C launch path.
+
+## Canonical runbook
+
+Use only:
 
 ```text
-RGB crack image
-→ Improved MeanFlow (iMF)
-→ GeoCrack conditional architecture
-→ centerline + dense EDT geometry
-→ geometry-aware mask decoding
-→ one-step prediction
-NFE = 1
+docs/OPTION_C_V1_RUNBOOK.md
 ```
 
-Current journal candidate:
+`docs/LOCAL_WORKSTATION_GUIDE.md` contains legacy V3/V4/A5 workflows and must not be used to launch Option-C experiments.
+
+## Required pre-training sequence
 
 ```text
-configs/journal/a5_geocrack_imf_endpoint_candidate.yaml
+CPU CI / pytest / Option-C protocol preflight
+        ↓
+Option-C RTX3090 GPU preflight for J0-J4
+        ↓
+20-step J0-J4 engineering smoke on CFD
+        ↓
+source-only scientific screens
+        ↓
+4,125 / 8,250 / 12,375 / 16,500 milestones
+        ↓
+21,000-step headline candidate only after gates pass
 ```
 
-The baseline and control configs in `configs/journal/` are retained only because they are required for the locked ablation protocol. They are **scientific controls, not older code versions**.
-
-## Canonical configs
-
-| Role | Config |
-|---|---|
-| Conference main | `configs/conference/crackmeanflow_unet.yaml` |
-| Journal baseline before endpoint exposure | `configs/journal/a5_geocrack_imf_baseline.yaml` |
-| Journal current candidate | `configs/journal/a5_geocrack_imf_endpoint_candidate.yaml` |
-| Capacity-matched direct-mask baseline | `configs/journal/a2b_original_mismatch_control.yaml` |
-| Capacity-matched endpoint-aware control | `configs/journal/a2b_hybrid_imf_mask_capacity_matched.yaml` |
-| Journal endpoint candidate without GIC | `configs/journal/a5_geocrack_imf_no_gic_control.yaml` |
-
-Do not create additional “v2/v3/v4/v5” configs on this branch. New scientific changes should be represented as a clearly named ablation/control and added to `configs/protocol/paper_protocol.yaml` only after review.
-
-## Main entrypoints
+### CPU/protocol gate
 
 ```bash
-# Validate protocol/config consistency
-python scripts/protocol_preflight.py
-
-# GPU 256×256 forward/backward preflight
-python scripts/gpu_preflight.py --help
-
-# Prepare CFD into parent-disjoint train/val/test splits
-python scripts/prepare_cfd_dataset.py --help
-
-# Full preflight using prepared CFD
-python scripts/preflight_audit.py --help
-
-# Training
-python scripts/train_journal.py --help
-
-# Freeze threshold using CFD validation only
-python scripts/freeze_source_threshold.py --help
-
-# OOD / target evaluation
-python scripts/evaluate_journal.py --help
-
-# Aggregate independent training seeds
-python scripts/aggregate_training_seeds.py --help
+python -m compileall -q crackmeanflow scripts tests
+python -m pytest -q
+python scripts/protocol_preflight_option_c.py \
+  --out reports/OPTION_C_V1_ENGINEERING_GATE.json
 ```
 
-## Required local sequence
+### RTX3090 Option-C GPU gate
 
-```text
-clean environment
-→ install requirements
-→ pytest
-→ prepare CFD
-→ protocol/data preflight
-→ GPU preflight @256
-→ micro-overfit
-→ short CFD run
-→ matched-budget training
-→ freeze CFD-validation threshold
-→ lock target benchmark
-→ OOD evaluation
-→ aggregate independent training seeds
+```bash
+python scripts/gpu_preflight_option_c.py \
+  --require-device-substring "RTX 3090" \
+  --out reports/OPTION_C_V1_GPU_PREFLIGHT.json
 ```
 
-See [`docs/LOCAL_WORKSTATION_GUIDE.md`](docs/LOCAL_WORKSTATION_GUIDE.md) for exact commands.
+This preflight explicitly exercises GIC where required and the J4 endpoint branch.
 
 ## Scientific invariants
 
-- MeanFlow remains the core of the Conference method.
-- Improved MeanFlow remains the core of the Journal method.
-- Main inference is **NFE=1**.
-- Target/OOD data must not tune thresholds or model selection.
-- Final thresholds are frozen from source CFD validation.
-- Source/target content hashes and code/protocol provenance are enforced.
-- Primary fair comparison is **matched optimizer budget**, not a claim of identical optimizer hyperparameters.
-- 128×128 is debug-only. Final scientific runs use 256×256.
+- Protocol ID: `OPTION_C_V1`.
+- Main inference: **NFE=1**.
+- Canonical research horizon: **21,000 optimizer steps**.
+- Milestones: `4125 / 8250 / 12375 / 16500 / 21000`.
+- Effective batch: 8.
+- Runtime microbatch overrides are forbidden for OPTION_C_V1.
+- J1→J2 changes only the representation factor plus metadata.
+- J2→J3 changes only GIC enablement plus metadata.
+- J3→J4 changes only endpoint exposure plus metadata.
+- Thresholds are frozen from CFD validation only.
+- GAPS384/OmniCrack may not tune architecture, threshold, runtime partition or checkpoint selection.
+- Final untouched external evaluation remains closed until the final protocol/candidate/seed policy is frozen.
+
+## PyTorch environment
+
+`requirements-dev.txt` is the CPU CI/audit environment and currently pins a CPU-audit PyTorch version. Do not install that Torch pin blindly on the RTX3090 workstation.
+
+Install a CUDA-compatible PyTorch build for the workstation first, then install `requirements.txt`. Exact Python/Torch/CUDA/cuDNN/package versions are captured into run/checkpoint provenance and should be frozen after the GPU smoke gate passes.
+
+## Main Option-C entrypoints
+
+```bash
+python scripts/protocol_preflight_option_c.py --help
+python scripts/gpu_preflight_option_c.py --help
+python scripts/train_journal.py --help
+python scripts/evaluate_journal.py --help
+python scripts/freeze_source_threshold.py --help
+```
 
 ## Repository layout
 
 ```text
-configs/        Canonical experiment and paper-protocol YAMLs
-crackmeanflow/  Reusable model, loss, data, metric and provenance code
-scripts/        Training, evaluation, preflight and audit entrypoints
-tests/          Regression and scientific-contract tests
-docs/           Project overview, protocol, QA state and local run guide
-third_party/    Provenance records only; no copied unlicensed implementation
+configs/option_c_v1/   Option-C J0-J4 configs
+configs/protocol/      protocol and design locks
+crackmeanflow/          model/loss/data/provenance implementation
+scripts/                training/evaluation/preflight tools
+tests/                  scientific-contract and regression tests
+docs/                   canonical runbook and research documentation
+reports/                audit and consensus evidence
 ```
 
-## Local release reports
-
-- [`reports/FINAL_LOCAL_READINESS.md`](reports/FINAL_LOCAL_READINESS.md) — final pre-GitHub readiness verdict.
-- [`reports/RELEASE_PREFLIGHT.json`](reports/RELEASE_PREFLIGHT.json) — compile/test/release-safety validation.
-- [`reports/FILE_MANIFEST_SHA256.txt`](reports/FILE_MANIFEST_SHA256.txt) — per-file SHA256 manifest for transfer verification.
-
-## Project documentation
-
-- [`docs/PROJECT_OVERVIEW.md`](docs/PROJECT_OVERVIEW.md) — detailed goals, architecture and research tracks.
-- [`docs/METHODS_AND_CONTROLS.md`](docs/METHODS_AND_CONTROLS.md) — exact role of every retained main/candidate/control config.
-- [`docs/PROJECT_STRUCTURE.md`](docs/PROJECT_STRUCTURE.md) — canonical file/folder map for local use.
-- [`docs/EXPERIMENT_PROTOCOL.md`](docs/EXPERIMENT_PROTOCOL.md) — training/evaluation/fairness rules.
-- [`docs/LOCAL_WORKSTATION_GUIDE.md`](docs/LOCAL_WORKSTATION_GUIDE.md) — workstation execution sequence.
-- [`docs/QA_STATUS.md`](docs/QA_STATUS.md) — current validated and not-yet-run gates.
-
-## Data and artifacts
-
-Datasets, checkpoints, outputs, target locks generated from private/local data, and large runtime artifacts are intentionally excluded from Git. Keep them outside the repository or under ignored local directories.
+Datasets, checkpoints and large runtime artifacts are intentionally excluded from Git.
