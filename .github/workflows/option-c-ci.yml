@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - journal/option-c-v1
+      - journal/option-c-v1-factorial-addendum
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

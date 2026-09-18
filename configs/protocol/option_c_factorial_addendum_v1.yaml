@@ -1,0 +1,73 @@
+schema: CRACKMEANFLOW_OPTION_C_FACTORIAL_ADDENDUM_V1
+
+addendum_id: OPTION_C_V1_FACTORIAL_ADDENDUM_V1
+
+base_protocol_id: OPTION_C_V1
+
+base_release_commit:
+  fb2cf43d719941b41024fbb078c777c485b1a490
+
+base_v4_commit:
+  f873ec2351dbd07cacd84e7ee7394a9bd5527b07
+
+source_branch:
+  journal/option-c-v1-factorial-addendum
+
+reason:
+  source_only_factorial_identifiability
+
+rationale: >-
+  Source-only J2/J3/J4 trajectories motivated an endpoint-only control so GIC
+  and endpoint main effects/interactions can be identified before target-domain
+  metrics are accessed.
+
+target_access_state:
+  target_metrics_seen_before_addendum: false
+  target_tuning_allowed: false
+  GAPS384: closed
+  OmniCrack30k_repartitioned_v013_holdout: closed
+  final_untouched_external_dataset: closed
+
+added_variant:
+  J2E:
+    base: J2
+    state: centerline_radius
+    causal_mask: true
+    gic: false
+    endpoint: true
+    endpoint_probability: 0.15
+
+factorial:
+  gic_off_endpoint_off: J2
+  gic_on_endpoint_off: J3
+  gic_off_endpoint_on: J2E
+  gic_on_endpoint_on: J4
+
+comparisons:
+  causal_medial_axis: J2-J1
+  gic_without_endpoint: J3-J2
+  endpoint_without_gic: J2E-J2
+  endpoint_with_gic: J4-J3
+  gic_with_endpoint: J4-J2E
+  interaction: "(J4-J3)-(J2E-J2)"
+
+interpretation:
+  J2_minus_J1:
+    causal medial-axis representation effect, not causality alone
+  endpoint_main_effect:
+    must be examined under both GIC-off and GIC-on conditions
+  gic_main_effect:
+    must be examined under both endpoint-off and endpoint-on conditions
+
+training:
+  research_scheduler_total_steps: 21000
+  source_screen_stop: 16500
+  effective_batch_size: 8
+  nfe: 1
+
+future_target_policy:
+  development_ood:
+  - GAPS384
+  - OmniCrack30k_repartitioned_v013_holdout
+  target_access_requires_lock: true
+  threshold_source: CFD_validation_only

@@ -30,6 +30,7 @@ OPTION_C_CONFIGS = {
     'J0': 'configs/option_c_v1/j0_direct_mask.yaml',
     'J1': 'configs/option_c_v1/j1_centerline_edt_noncausal.yaml',
     'J2': 'configs/option_c_v1/j2_centerline_radius_causal.yaml',
+    'J2E': 'configs/option_c_v1/j2e_centerline_radius_endpoint_only.yaml',
     'J3': 'configs/option_c_v1/j3_centerline_radius_gic.yaml',
     'J4': 'configs/option_c_v1/j4_centerline_radius_gic_endpoint.yaml',
 }
@@ -186,7 +187,7 @@ def _run_variant(name, cfg, device, total_vram, max_reserved_fraction):
 
 def main():
     ap = argparse.ArgumentParser(
-        description='Option-C V1 canonical 256x256 CUDA forward/backward/VRAM preflight for J0-J4.'
+        description='Option-C V1 canonical 256x256 CUDA forward/backward/VRAM preflight for J0-J2E-J3-J4.'
     )
     ap.add_argument('--out', default='reports/OPTION_C_V1_GPU_PREFLIGHT.json')
     ap.add_argument('--max-reserved-fraction', type=float, default=.90)

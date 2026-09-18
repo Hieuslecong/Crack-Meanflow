@@ -1,6 +1,6 @@
 # OPTION-C V1 — Canonical Workstation Runbook
 
-This is the **only canonical runbook for `journal/option-c-v1`**. Legacy V3/V4/A5 commands in older documents are retained for historical reproducibility and must not be used to launch Option-C experiments.
+This is the **canonical runbook for the frozen Option-C V1 evidence and its pre-target factorial addendum**. The original V1 source evidence remains frozen on commit `fb2cf43d719941b41024fbb078c777c485b1a490` and is not rewritten by the addendum branch. Legacy V3/V4/A5 commands in older documents are retained for historical reproducibility and must not be used to launch Option-C experiments.
 
 ## 1. Freeze the workstation environment
 
@@ -33,9 +33,24 @@ All three must pass.
 J0  configs/option_c_v1/j0_direct_mask.yaml
 J1  configs/option_c_v1/j1_centerline_edt_noncausal.yaml
 J2  configs/option_c_v1/j2_centerline_radius_causal.yaml
+J2E configs/option_c_v1/j2e_centerline_radius_endpoint_only.yaml
 J3  configs/option_c_v1/j3_centerline_radius_gic.yaml
 J4  configs/option_c_v1/j4_centerline_radius_gic_endpoint.yaml
 ```
+
+The pre-target factorial addendum is maintained on
+`journal/option-c-v1-factorial-addendum` and adds only this control:
+
+| Variant | Causal radius | GIC | Endpoint |
+| ------- | ------------: | --: | -------: |
+| J2      |           Yes | Off |      Off |
+| J2E     |           Yes | Off |       On |
+| J3      |           Yes |  On |      Off |
+| J4      |           Yes |  On |       On |
+
+J2E is an exact J2 training/configuration control except for the endpoint-only
+factor and its identifying metadata. It is intended to identify endpoint main
+effects and the GIC-by-endpoint interaction before any target/OOD access.
 
 Scientific interpretation:
 
@@ -57,7 +72,7 @@ python scripts/gpu_preflight_option_c.py \
   --out reports/OPTION_C_V1_GPU_PREFLIGHT.json
 ```
 
-PASS requires, for every J0-J4 variant:
+PASS requires, for every J0-J2E-J3-J4 variant:
 
 - 256x256 model construction;
 - finite forward/backward gradients;
@@ -65,7 +80,7 @@ PASS requires, for every J0-J4 variant:
 - EMA state allocation;
 - acceptable peak reserved VRAM;
 - GIC branch exercised when required;
-- endpoint branch exercised when required (J4).
+- endpoint branch exercised when required (J2E and J4).
 
 Stop immediately if this gate fails.
 
@@ -99,7 +114,9 @@ python scripts/train_journal.py \
   --out <OUTPUT_DIR>
 ```
 
-Run this for J0, J1, J2, J3 and J4. These runs are diagnostic-only and are not paper-eligible.
+Run this for J0, J1, J2, J2E, J3 and J4 when validating the factorial
+addendum. These runs are diagnostic-only and are not paper-eligible. J2E must
+reach the endpoint branch while recording zero active GIC samples.
 
 Required checks:
 
@@ -108,7 +125,7 @@ Required checks:
 - EMA updates;
 - no CUDA OOM;
 - GIC counters are reachable for J3/J4;
-- endpoint counters are reachable for J4;
+- endpoint counters are reachable for J2E/J4;
 - checkpoint/save/load artifacts are emitted consistently;
 - `RUN_IDENTITY.json` records the exact environment and hashes.
 
