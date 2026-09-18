@@ -1,0 +1,49 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_FACTORIAL_ADDENDUM_PRETARGET_LOCK_V1",
+  "original_v1_branch": "journal/option-c-v1",
+  "original_v1_commit": "fb2cf43d719941b41024fbb078c777c485b1a490",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "addendum_branch": "journal/option-c-v1-factorial-addendum",
+  "target_metrics_seen_before_addendum": false,
+  "target_accessed_during_patch": false,
+  "reason": "factorial identifiability from source-only evidence",
+  "new_variant": {
+    "name": "J2E",
+    "base": "J2",
+    "gic": false,
+    "endpoint": true,
+    "endpoint_probability": 0.15,
+    "endpoint_sampling": "stratified_disjoint"
+  },
+  "core_model_changed": false,
+  "loss_implementation_changed": false,
+  "training_loop_changed": false,
+  "evaluator_changed": false,
+  "cpu": {
+    "compileall": "PASS",
+    "pytest": "184 passed",
+    "protocol_preflight": "PASS"
+  },
+  "gpu": {
+    "device": "NVIDIA GeForce RTX 3090",
+    "preflight": "PASS",
+    "variants": ["J0", "J1", "J2", "J2E", "J3", "J4"]
+  },
+  "j2e_smoke20": {
+    "status": "PASS",
+    "optimizer_step": 20,
+    "research_scheduler_total_steps": 21000,
+    "endpoint_exact_samples": 22,
+    "gic_active_samples": 0,
+    "loss_finite": true,
+    "gradient_finite": true,
+    "ema_loadable": true,
+    "checkpoint_loadable": true,
+    "run_class": "diagnostic",
+    "research_metric_valid": false,
+    "eligible_for_paper": false
+  },
+  "ready_for_j2e_16500_training": true,
+  "ready_for_target_access": false,
+  "ready_for_21000": false
+}

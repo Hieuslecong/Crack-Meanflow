@@ -1,0 +1,156 @@
+{
+  "base_release_commit": "fb2cf43d719941b41024fbb078c777c485b1a490",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "branch": "journal/option-c-v1-factorial-addendum",
+  "design_lock_path": "configs/protocol/option_c_design_lock_v1.yaml",
+  "design_lock_sha256": "fa90741308a3116b8b10a7622dbbb92c9913f28a477106317e52aa85aef2aad2",
+  "errors": [],
+  "factorial_addendum": {
+    "added_variant": {
+      "J2E": {
+        "base": "J2",
+        "causal_mask": true,
+        "endpoint": true,
+        "endpoint_probability": 0.15,
+        "gic": false,
+        "state": "centerline_radius"
+      }
+    },
+    "addendum_id": "OPTION_C_V1_FACTORIAL_ADDENDUM_V1",
+    "base_protocol_id": "OPTION_C_V1",
+    "base_release_commit": "fb2cf43d719941b41024fbb078c777c485b1a490",
+    "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+    "comparisons": {
+      "causal_medial_axis": "J2-J1",
+      "endpoint_with_gic": "J4-J3",
+      "endpoint_without_gic": "J2E-J2",
+      "gic_with_endpoint": "J4-J2E",
+      "gic_without_endpoint": "J3-J2",
+      "interaction": "(J4-J3)-(J2E-J2)"
+    },
+    "factorial": {
+      "gic_off_endpoint_off": "J2",
+      "gic_off_endpoint_on": "J2E",
+      "gic_on_endpoint_off": "J3",
+      "gic_on_endpoint_on": "J4"
+    },
+    "future_target_policy": {
+      "development_ood": [
+        "GAPS384",
+        "OmniCrack30k_repartitioned_v013_holdout"
+      ],
+      "target_access_requires_lock": true,
+      "threshold_source": "CFD_validation_only"
+    },
+    "interpretation": {
+      "J2_minus_J1": "causal medial-axis representation effect, not causality alone",
+      "endpoint_main_effect": "must be examined under both GIC-off and GIC-on conditions",
+      "gic_main_effect": "must be examined under both endpoint-off and endpoint-on conditions"
+    },
+    "rationale": "Source-only J2/J3/J4 trajectories motivated an endpoint-only control so GIC and endpoint main effects/interactions can be identified before target-domain metrics are accessed.",
+    "reason": "source_only_factorial_identifiability",
+    "schema": "CRACKMEANFLOW_OPTION_C_FACTORIAL_ADDENDUM_V1",
+    "source_branch": "journal/option-c-v1-factorial-addendum",
+    "target_access_state": {
+      "GAPS384": "closed",
+      "OmniCrack30k_repartitioned_v013_holdout": "closed",
+      "final_untouched_external_dataset": "closed",
+      "target_metrics_seen_before_addendum": false,
+      "target_tuning_allowed": false
+    },
+    "training": {
+      "effective_batch_size": 8,
+      "nfe": 1,
+      "research_scheduler_total_steps": 21000,
+      "source_screen_stop": 16500
+    }
+  },
+  "factorial_addendum_path": "configs/protocol/option_c_factorial_addendum_v1.yaml",
+  "factorial_addendum_sha256": "85d69313ddb0734908e2ef358d7706e84a116ada0758ec6f48af866f8c502189",
+  "factorial_status": "PASS",
+  "head": "c56b99aea871caae4b78a9a9f56bb6025995bb14",
+  "ladder": {
+    "pairs": {
+      "J1->J2": [
+        "experiment",
+        "model.representation",
+        "option_c_variant",
+        "protocol_role"
+      ],
+      "J2->J2E": [
+        "experiment",
+        "loss.endpoint_probability",
+        "option_c_variant",
+        "protocol_role"
+      ],
+      "J2->J3": [
+        "experiment",
+        "loss.gic_weight",
+        "option_c_variant",
+        "protocol_role"
+      ],
+      "J2E->J4": [
+        "experiment",
+        "loss.gic_weight",
+        "option_c_variant",
+        "protocol_role"
+      ],
+      "J3->J4": [
+        "experiment",
+        "loss.endpoint_probability",
+        "option_c_variant",
+        "protocol_role"
+      ]
+    },
+    "status": "PASS"
+  },
+  "protocol_id": "OPTION_C_V1",
+  "protocol_path": "configs/protocol/option_c_protocol_v1.yaml",
+  "protocol_sha256": "8f7d03bf8e67adf7eb11d443df2a1ca939e9112c4c2674e17515bd85ddb6dfd4",
+  "schema": "CRACKMEANFLOW_OPTION_C_PREFLIGHT_V3",
+  "status": "PASS",
+  "variants": {
+    "J0": {
+      "file_sha256": "993a640dd15e5087b66b749b8b11c625f8ac5d444b156abe6a82ed5bf123c26f",
+      "path": "configs/option_c_v1/j0_direct_mask.yaml",
+      "semantic_sha256": "7f479d11bfcdfc0dcdae30899c7baaa6f43d7b72141d5caa76c0222a6240ee34",
+      "status": "PASS",
+      "variant": "J0"
+    },
+    "J1": {
+      "file_sha256": "966016857ab741a59f9fe5c6d9f2be586b0c7e1a7b29c89702eaae5447b4a316",
+      "path": "configs/option_c_v1/j1_centerline_edt_noncausal.yaml",
+      "semantic_sha256": "c1f7d36047e4b8b5b131da0fc6c5e58b06c87b89252147d2e37879c865cfb243",
+      "status": "PASS",
+      "variant": "J1"
+    },
+    "J2": {
+      "file_sha256": "fc83a8009fb0c8b2ed5030d9bf8b1b7e999e05be0447842457774a541d2dc472",
+      "path": "configs/option_c_v1/j2_centerline_radius_causal.yaml",
+      "semantic_sha256": "493e907224a5ac802fdee1a5c1f91d97ac20d87393a7569f540a1fc47ba808f9",
+      "status": "PASS",
+      "variant": "J2"
+    },
+    "J2E": {
+      "file_sha256": "146fda3cad1c8454db3a30042ed263d2e44f7033d6c17aec19d41a2eae6c3ae2",
+      "path": "configs/option_c_v1/j2e_centerline_radius_endpoint_only.yaml",
+      "semantic_sha256": "94237f5fe388ddb409c61b5d597dd2e5402df7354907d6cee4164352b5b6597b",
+      "status": "PASS",
+      "variant": "J2E"
+    },
+    "J3": {
+      "file_sha256": "18060ade6c272569b8ea411bb908af83871cdb26aa7cdcbb5ff357f31747a217",
+      "path": "configs/option_c_v1/j3_centerline_radius_gic.yaml",
+      "semantic_sha256": "09370e66156a9478cb95296d58b9863c334e104db6314ff05f4a70c0d14778fc",
+      "status": "PASS",
+      "variant": "J3"
+    },
+    "J4": {
+      "file_sha256": "7182d10840d16ce1248c0cb6988437a4bc6703141ab97f97fd4dca85d9739208",
+      "path": "configs/option_c_v1/j4_centerline_radius_gic_endpoint.yaml",
+      "semantic_sha256": "98ff37780f04b4556352b529819c3c9a9e94aac9fdddaf501676bd0338750039",
+      "status": "PASS",
+      "variant": "J4"
+    }
+  }
+}

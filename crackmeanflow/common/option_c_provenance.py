@@ -5,11 +5,13 @@ from pathlib import Path
 BASE_V4_COMMIT='f873ec2351dbd07cacd84e7ee7394a9bd5527b07'
 PROTOCOL_ID='OPTION_C_V1'
 DESIGN_LOCK_REL='configs/protocol/option_c_design_lock_v1.yaml'
+FACTORIAL_ADDENDUM_REL='configs/protocol/option_c_factorial_addendum_v1.yaml'
 CANONICAL_MILESTONES=(4125,8250,12375,16500,21000)
 VARIANTS={
     'J0':{'backbone':'hybrid_imf_mask','representation':None,'gic':False,'endpoint':False},
     'J1':{'backbone':'geocrack_imf','representation':'centerline_edt','gic':False,'endpoint':False},
     'J2':{'backbone':'geocrack_imf','representation':'centerline_radius','gic':False,'endpoint':False},
+    'J2E':{'backbone':'geocrack_imf','representation':'centerline_radius','gic':False,'endpoint':True},
     'J3':{'backbone':'geocrack_imf','representation':'centerline_radius','gic':True,'endpoint':False},
     'J4':{'backbone':'geocrack_imf','representation':'centerline_radius','gic':True,'endpoint':True},
 }
@@ -24,6 +26,13 @@ def option_c_design_lock_sha256(root=None):
     root=Path(root) if root is not None else Path(__file__).resolve().parents[2]
     path=root/DESIGN_LOCK_REL
     if not path.is_file(): raise RuntimeError(f'Option-C design lock missing: {path}')
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def option_c_factorial_addendum_sha256(root=None):
+    root=Path(root) if root is not None else Path(__file__).resolve().parents[2]
+    path=root/FACTORIAL_ADDENDUM_REL
+    if not path.is_file(): raise RuntimeError(f'Option-C factorial addendum missing: {path}')
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -55,8 +64,8 @@ def validate_option_c_config(cfg,variant):
     gic=bool(float(loss.get('gic_weight',0))>0);endpoint=bool(float(loss.get('endpoint_probability',0))>0)
     if gic!=exp['gic']:errors.append('GIC state mismatch')
     if endpoint!=exp['endpoint']:errors.append('endpoint state mismatch')
-    if variant=='J4' and loss.get('endpoint_sampling')!='stratified_disjoint':errors.append('J4 requires stratified_disjoint endpoint sampling')
-    if variant in {'J1','J2','J3','J4'}:
+    if exp['endpoint'] and loss.get('endpoint_sampling')!='stratified_disjoint':errors.append('endpoint variants require stratified_disjoint endpoint sampling')
+    if variant in {'J1','J2','J2E','J3','J4'}:
         for key,val in [('size','S'),('patch',8),('img_size',256),('local_refine',True)]:
             if model.get(key)!=val:errors.append(f'J1-J4 shared backbone invariant failed: {key}')
         for key,val in [('gic_center_weight',1.0),('gic_radius_weight',0.5),('gic_mask_weight',0.5)]:
@@ -69,6 +78,8 @@ PAIRWISE_ALLOWED_DIFFS={
     ('J1','J2'):{'option_c_variant','experiment','model.representation','protocol_role'},
     ('J2','J3'):{'option_c_variant','experiment','loss.gic_weight','protocol_role'},
     ('J3','J4'):{'option_c_variant','experiment','loss.endpoint_probability','protocol_role'},
+    ('J2','J2E'):{'option_c_variant','experiment','loss.endpoint_probability','protocol_role'},
+    ('J2E','J4'):{'option_c_variant','experiment','loss.gic_weight','protocol_role'},
 }
 
 
