@@ -1,0 +1,91 @@
+{
+  "schema": "CRACKMEANFLOW_OPTION_C_V1_J2E_PRE16500_FREEZE_V1",
+  "addendum_commit_sha": "6e1bd09739dc7e0449ac29b026d64216f87d3750",
+  "branch": "journal/option-c-v1-factorial-addendum",
+  "original_v1_branch": "journal/option-c-v1",
+  "base_v1_commit": "fb2cf43d719941b41024fbb078c777c485b1a490",
+  "base_v4_commit": "f873ec2351dbd07cacd84e7ee7394a9bd5527b07",
+  "original_v1_preserved": true,
+  "pr": {
+    "number": 1,
+    "url": "https://github.com/Hieuslecong/Crack-Meanflow/pull/1",
+    "draft": true,
+    "merged": false,
+    "base_branch": "journal/option-c-v1",
+    "base_sha": "fb2cf43d719941b41024fbb078c777c485b1a490"
+  },
+  "source_tree_sha256": "915431a08a02fb073bc5c7b8f82a13484f5f98f457f4f54ea322504f1ce56924",
+  "protocol_bundle_sha256": "e7326576f8f1b5d9e21e03d480526080aea5a648a4a5a2daa3ede08cf60e57be",
+  "design_lock_sha256": "fa90741308a3116b8b10a7622dbbb92c9913f28a477106317e52aa85aef2aad2",
+  "factorial_addendum_sha256": "85d69313ddb0734908e2ef358d7706e84a116ada0758ec6f48af866f8c502189",
+  "j2e_config_sha256": "146fda3cad1c8454db3a30042ed263d2e44f7033d6c17aec19d41a2eae6c3ae2",
+  "j2e_config_semantic_sha256": "94237f5fe388ddb409c61b5d597dd2e5402df7354907d6cee4164352b5b6597b",
+  "dataset": {
+    "name": "CFD",
+    "version": "CFD_FROZEN_HISTORICAL_V1",
+    "root": "/home/hieulc/avitech11/crackmean_flow/_data/CFD_frozen_historical_v1",
+    "train_count": 6606,
+    "val_count": 1447,
+    "test_count": 1384,
+    "train_name_sha256": "f9fe72024f0db9a234215a7504bf360f9e631a16b742d1c2bf0c22d23b7de713",
+    "train_content_sha256": "a492deb23122594631dd346fcc05348e26234f748f60edf7205c21b25ddf27b4",
+    "val_name_sha256": "db11fd5002c9cb02e73a82f581ba4aca427215c18ee04bc1f1e889009fbe9aaf",
+    "val_content_sha256": "005e334bca6aa2ef3782147af97adf9c50892f1037c9d767e5b6226823760b61",
+    "test_name_sha256": "85f21d1e98ac1335bb1a048bdcdcec686dccba928ee9b5e3b484fbaae0afd680",
+    "test_content_sha256": "333819fe508c8be23f34354566c588cd5fd23108a1cf101efbbdf5c968b1dbda"
+  },
+  "environment": {
+    "python": "3.13.5",
+    "pytorch": "2.6.0+cu124",
+    "cuda_runtime": "12.4",
+    "cudnn": "90100",
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "compute_capability": "8.6",
+    "vram_gib": 23.68426513671875,
+    "driver": "550.163.01",
+    "cudnn_benchmark": false,
+    "deterministic_algorithms_at_process_start": false,
+    "smoke_runtime_identity_recorded_deterministic": true
+  },
+  "checks": {
+    "worktree_clean": true,
+    "git_diff_check": "PASS",
+    "compileall": "PASS",
+    "pytest": "184 passed",
+    "protocol_preflight": "PASS",
+    "gpu_preflight": "PASS",
+    "j2e_smoke20": "PASS",
+    "j2e_endpoint_branch_reached": "PASS",
+    "j2e_gic_active_samples": 0,
+    "j2e_scheduler_horizon": 21000,
+    "j2e_runtime_batch_override_used": false,
+    "ci_run": {
+      "run_number": 17,
+      "run_id": 35329045443,
+      "head_sha": "6e1bd09739dc7e0449ac29b026d64216f87d3750",
+      "conclusion": "success",
+      "url": "https://github.com/Hieuslecong/Crack-Meanflow/actions/runs/35329045443"
+    }
+  },
+  "target_data_accessed": false,
+  "target_metrics_seen": false,
+  "target_access_policy": {
+    "GAPS384": "closed",
+    "OmniCrack30k": "closed",
+    "final_external_dataset": "closed"
+  },
+  "training_lock": {
+    "variant": "J2E",
+    "seed": 0,
+    "research_scheduler_total_steps": 21000,
+    "source_screen_stop_step": 16500,
+    "run_class": "screen",
+    "nfe": 1,
+    "canonical_yaml_microbatch": true,
+    "runtime_batch_override": false,
+    "required_milestones": [4125, 8250, 12375, 16500]
+  },
+  "ready_for_j2e_16500_training": true,
+  "ready_for_target_access": false,
+  "target_access": "CLOSED"
+}
