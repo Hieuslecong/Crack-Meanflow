@@ -68,7 +68,7 @@
   "factorial_addendum_path": "configs/protocol/option_c_factorial_addendum_v1.yaml",
   "factorial_addendum_sha256": "85d69313ddb0734908e2ef358d7706e84a116ada0758ec6f48af866f8c502189",
   "factorial_status": "PASS",
-  "head": "c56b99aea871caae4b78a9a9f56bb6025995bb14",
+  "head": "f48ceb4405d36721c66905f38a7431414cb9f8a2",
   "ladder": {
     "pairs": {
       "J1->J2": [
