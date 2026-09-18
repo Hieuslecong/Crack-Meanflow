@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - journal/option-c-v1
+      - journal/option-c-v1-factorial-addendum
   workflow_dispatch:
 
 jobs:
