@@ -1,7 +1,8 @@
 from __future__ import annotations
-import json
+import json,os,sys
 from pathlib import Path
 import yaml
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from crackmeanflow.common.sit_v1_provenance import validate_sit_v1_pair, sit_v1_protocol_sha256
 
 ROOT=Path(__file__).resolve().parents[1]
