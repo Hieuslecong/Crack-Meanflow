@@ -46,8 +46,10 @@ def main():
     ap.add_argument('--dataset-name',default='CFD'); ap.add_argument('--dataset-version',required=True); ap.add_argument('--out',required=True); a=ap.parse_args()
     if not str(a.dataset_name).strip() or not str(a.dataset_version).strip(): raise ValueError('source dataset name/version must be non-empty')
     cfg=yaml.safe_load(open(a.config)); ck=torch.load(a.ckpt,map_location='cpu',weights_only=False)
-    require_complete_checkpoint(ck, eligibility_class="headline", exact_budget=False)
-    verify_run_completion_artifact(a.ckpt, ck, eligibility_class="headline")
+    saved_run_class=str((ck.get('extra_state') or {}).get('run_class','headline'))
+    eligibility_class='screen' if saved_run_class=='screen' else 'headline'
+    require_complete_checkpoint(ck, eligibility_class=eligibility_class, exact_budget=False)
+    verify_run_completion_artifact(a.ckpt, ck, eligibility_class=eligibility_class)
     if ck.get('config_hash')!=config_hash(cfg): raise RuntimeError('threshold-freeze config does not exactly match checkpoint config')
     if not ck.get('source_tree_sha256') or ck['source_tree_sha256']!=source_tree_hash(): raise RuntimeError('threshold-freeze source tree does not match checkpoint')
     if not ck.get('protocol_bundle_sha256') or ck['protocol_bundle_sha256']!=protocol_bundle_hash(): raise RuntimeError('threshold-freeze paper/fairness protocol bundle does not match checkpoint')
