@@ -1,0 +1,51 @@
+protocol_id: CRACKMEANFLOW_SIT_V1
+status: preregistered_before_sit_training
+scientific_question:
+  primary: Does iMF improve direct-mask one-step crack segmentation over MF under the exact same SiT backbone and sampling protocol?
+  secondary: Does the resulting SiT system improve cross-domain performance over the frozen Conference reference?
+source:
+  dataset: CFD
+  split_id: CFD_FROZEN_HISTORICAL_V1
+  target_tuning: false
+architecture_lock:
+  representation: direct_mask
+  shared_backbone: true
+  img_size: 256
+  patch: 8
+  dim: 384
+  depth: 10
+  heads: 6
+  geometry: false
+  gic: false
+  endpoint_module: false
+  pretraining: false
+variants:
+  S0: {backbone: sit_shared_mask, objective: mf}
+  S1: {backbone: sit_shared_mask, objective: imf}
+fairness_lock:
+  effective_batch_size: 8
+  shared_rt_sampling: true
+  fm_fraction: 0.5
+  auxiliary_losses: none
+  only_allowed_S0_S1_difference: core_flow_objective_and_metadata
+budget:
+  scheduler_horizon_steps: 21000
+  source_screen_steps: [4125,8250,12375,16500]
+  headline_step: 21000
+  initial_required_stop: 16500
+  initial_training_seeds: [0]
+  confirmation_training_seeds: [0,1,2]
+evaluation:
+  nfe: 1
+  source_threshold_only: true
+  development_ood: [GAPS384, OmniCrack30k_repartitioned_v013_holdout]
+  development_ood_role: model_selection_only
+  final_external_dataset_access: closed
+anti_bloat:
+  max_new_sit_arms: 2
+  rescue_modules_after_ood_failure: forbidden
+  new_geometry_modules: forbidden
+  new_regularizers: forbidden
+  architecture_changes_after_first_development_ood_result: forbidden
+stop_rule:
+  if_both_S0_S1_are_weak_on_development_ood: stop_entire_sit_direction
