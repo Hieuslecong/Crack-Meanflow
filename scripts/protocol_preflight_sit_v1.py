@@ -16,7 +16,8 @@ def main():
         'variants':sorted(configs),
         'pairwise_differences':pair['differences'],
         'protocol_sha256':sit_v1_protocol_sha256(ROOT),
-        'target_metrics_seen':False,
+        'development_ood_metrics_previously_seen':True,
+        'development_ood_role':'model_selection_only',
         'final_external_accessed':False,
     }
     print(json.dumps(out,indent=2,sort_keys=True))
