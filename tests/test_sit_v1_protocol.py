@@ -138,3 +138,15 @@ def test_sit_v1_screen_target_firewall():
     try:_validate_sit_v1_target_access('CRACKMEANFLOW_SIT_V1','screen','FINAL_EXTERNAL')
     except RuntimeError as exc:assert 'target firewall' in str(exc)
     else:raise AssertionError('screen-stage final external access must fail closed')
+
+
+def test_sit_v1_optimizer_recipe_is_locked():
+    for cfg in _configs().values():
+        tr=cfg['train']
+        assert tr['lr']==1e-4
+        assert tr['adam_beta1']==0.9
+        assert tr['adam_beta2']==0.95
+        assert tr['weight_decay']==0.0
+        assert tr['ema_decay']==0.9999
+        assert tr['lr_schedule']=='constant'
+        assert tr['warmup_epochs']==0
