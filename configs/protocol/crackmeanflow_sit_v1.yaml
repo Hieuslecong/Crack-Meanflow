@@ -10,6 +10,11 @@ source:
 architecture_lock:
   representation: direct_mask
   shared_backbone: true
+  architecture_family: conditional_SiT_adaptation
+  canonical_sit_claim: false
+  positional_embedding: fixed_2d_sincos
+  output_parameterization: direct_u_v_velocity_heads
+  image_conditioning: additive_RGB_patch_embedding
   img_size: 256
   patch: 8
   dim: 384
