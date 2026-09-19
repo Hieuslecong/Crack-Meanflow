@@ -43,6 +43,14 @@ def _method_config_hash(cfg):
     if isinstance(c.get('train'),dict): c['train'].pop('seed',None)
     return config_hash(c)
 
+def _validate_sit_v1_target_access(protocol_id,eligibility_class,dataset_name):
+    if protocol_id!='CRACKMEANFLOW_SIT_V1' or eligibility_class!='screen':
+        return
+    allowed={'GAPS384','OmniCrack30k_repartitioned_v013_holdout'}
+    if dataset_name not in allowed:
+        raise RuntimeError(f'SiT-V1 screen-stage target firewall rejected dataset={dataset_name!r}; allowed development OOD={sorted(allowed)}')
+
+
 class ForwardCounter(nn.Module):
     def __init__(self,model):super().__init__();self.model=model;self.forward_calls=0;self.flow_output_calls=0
     def forward(self,*a,**kw):self.forward_calls+=1;return self.model(*a,**kw)
@@ -71,10 +79,7 @@ def main():
         eligibility_class='screen' if saved_run_class=='screen' else 'headline'
     selected_checkpoint_status=require_complete_checkpoint(ck,eligibility_class=eligibility_class,exact_budget=False)
     completion_record=verify_run_completion_artifact(a.ckpt,ck,eligibility_class=eligibility_class)
-    if cfg.get('protocol_id')=='CRACKMEANFLOW_SIT_V1' and eligibility_class=='screen':
-        allowed_dev_ood={'GAPS384','OmniCrack30k_repartitioned_v013_holdout'}
-        if a.dataset_name not in allowed_dev_ood:
-            raise RuntimeError(f'SiT-V1 screen-stage target firewall rejected dataset={a.dataset_name!r}; allowed development OOD={sorted(allowed_dev_ood)}')
+    _validate_sit_v1_target_access(cfg.get('protocol_id'),eligibility_class,a.dataset_name)
     if int(cfg.get('eval',{}).get('num_steps',1))!=1:raise RuntimeError('headline evaluation requires eval.num_steps=1')
     cfg_hash=config_hash(cfg);ck_cfg_hash=ck.get('config_hash');config_match=bool(ck_cfg_hash) and ck_cfg_hash==cfg_hash
     if not config_match and not a.allow_config_mismatch:raise RuntimeError('evaluation config does not match checkpoint config')
