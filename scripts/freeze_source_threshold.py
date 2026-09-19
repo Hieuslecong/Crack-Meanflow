@@ -17,7 +17,7 @@ from crackmeanflow.sit import build_sit
 from crackmeanflow.journal.models.sit_mask_baseline import MaskIMFSiTModel, HybridMaskIMFModel
 from crackmeanflow.journal import calibrate_geometry_threshold_on_validation, evaluate_geometry_with_frozen_threshold
 from crackmeanflow.factory import build_model_and_rasterizer
-from crackmeanflow.common.training_protocol import require_complete_checkpoint, verify_run_completion_artifact
+from crackmeanflow.common.training_protocol import require_complete_checkpoint, verify_run_completion_artifact, scientific_eligibility_class_from_checkpoint
 
 
 def _ema(model,ck):
@@ -46,8 +46,7 @@ def main():
     ap.add_argument('--dataset-name',default='CFD'); ap.add_argument('--dataset-version',required=True); ap.add_argument('--out',required=True); a=ap.parse_args()
     if not str(a.dataset_name).strip() or not str(a.dataset_version).strip(): raise ValueError('source dataset name/version must be non-empty')
     cfg=yaml.safe_load(open(a.config)); ck=torch.load(a.ckpt,map_location='cpu',weights_only=False)
-    saved_run_class=str((ck.get('extra_state') or {}).get('run_class','headline'))
-    eligibility_class='screen' if saved_run_class=='screen' else 'headline'
+    eligibility_class=scientific_eligibility_class_from_checkpoint(ck)
     require_complete_checkpoint(ck, eligibility_class=eligibility_class, exact_budget=False)
     verify_run_completion_artifact(a.ckpt, ck, eligibility_class=eligibility_class)
     if ck.get('config_hash')!=config_hash(cfg): raise RuntimeError('threshold-freeze config does not exactly match checkpoint config')
