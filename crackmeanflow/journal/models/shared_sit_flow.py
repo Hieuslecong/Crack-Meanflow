@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import torch
 from torch import nn
 
@@ -26,7 +25,6 @@ class SharedCrackSiT(nn.Module):
         depth: int = 10,
         heads: int = 6,
         mlp_ratio: float = 4.0,
-        background_init: float = -0.95,
     ):
         super().__init__()
         img_size, patch, dim, depth, heads = map(int, (img_size, patch, dim, depth, heads))
@@ -36,9 +34,6 @@ class SharedCrackSiT(nn.Module):
             raise ValueError("dim must be divisible by heads")
         if depth < 1 or heads < 1:
             raise ValueError("depth and heads must be positive")
-        if not (-0.999 < float(background_init) < 0.999):
-            raise ValueError("background_init must lie inside (-0.999, 0.999)")
-
         self.img_size = img_size
         self.patch = patch
         self.dim = dim
@@ -58,12 +53,14 @@ class SharedCrackSiT(nn.Module):
         nn.init.zeros_(self.ada_out[-1].weight)
         nn.init.zeros_(self.ada_out[-1].bias)
 
-        self.clean_u_head = nn.Linear(dim, patch * patch)
-        self.clean_v_head = nn.Linear(dim, patch * patch)
-        bias = float(math.atanh(float(background_init)))
-        for head in (self.clean_u_head, self.clean_v_head):
+        # Canonical MeanFlow/iMF parameterization: direct average-velocity (u)
+        # and instantaneous-velocity (v) heads. Both are zero-initialized as in
+        # DiT/SiT-style final layers; v is auxiliary for iMF and unused at inference.
+        self.u_head = nn.Linear(dim, patch * patch)
+        self.v_head = nn.Linear(dim, patch * patch)
+        for head in (self.u_head, self.v_head):
             nn.init.zeros_(head.weight)
-            nn.init.constant_(head.bias, bias)
+            nn.init.zeros_(head.bias)
 
     def _unpatch(self, tokens: torch.Tensor) -> torch.Tensor:
         b = tokens.shape[0]
@@ -82,23 +79,11 @@ class SharedCrackSiT(nn.Module):
         scale, shift = self.ada_out(c).chunk(2, dim=-1)
         return self.norm(h) * (1 + scale[:, None]) + shift[:, None]
 
-    def clean_predictions(self, z: torch.Tensor, t: torch.Tensor, r: torch.Tensor, image: torch.Tensor):
-        h = self._features(z, t, r, image)
-        clean_u = torch.tanh(self._unpatch(self.clean_u_head(h)))
-        clean_v = torch.tanh(self._unpatch(self.clean_v_head(h)))
-        return clean_u, clean_v
-
-    @staticmethod
-    def clean_to_velocity(z: torch.Tensor, clean: torch.Tensor, t: torch.Tensor, min_t: float = 0.05):
-        return (z - clean) / _b(t.clamp(min=float(min_t)))
-
     def flow_outputs(self, z: torch.Tensor, t: torch.Tensor, r: torch.Tensor, image: torch.Tensor):
-        clean_u, clean_v = self.clean_predictions(z, t, r, image)
+        h = self._features(z, t, r, image)
         return {
-            "u": self.clean_to_velocity(z, clean_u, t),
-            "v": self.clean_to_velocity(z, clean_v, t),
-            "clean_u": clean_u,
-            "clean_v": clean_v,
+            "u": self._unpatch(self.u_head(h)),
+            "v": self._unpatch(self.v_head(h)),
         }
 
     def forward(self, z: torch.Tensor, r: torch.Tensor, t: torch.Tensor, y=None, **kwargs):
@@ -128,5 +113,4 @@ def build_shared_crack_sit(cfg):
         depth=cfg.get("depth", 10),
         heads=cfg.get("heads", 6),
         mlp_ratio=cfg.get("mlp_ratio", 4.0),
-        background_init=cfg.get("background_init", -0.95),
     )
