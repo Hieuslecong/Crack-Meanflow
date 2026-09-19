@@ -70,8 +70,8 @@ def require_complete_checkpoint(
     exact_budget: bool = True,
 ) -> dict[str, Any]:
     """Validate checkpoint completion metadata before scientific evaluation."""
-    if eligibility_class not in {"headline", "diagnostic"}:
-        raise ValueError("eligibility_class must be headline or diagnostic")
+    if eligibility_class not in {"headline", "screen", "diagnostic"}:
+        raise ValueError("eligibility_class must be headline, screen, or diagnostic")
     if not isinstance(checkpoint, Mapping):
         raise RuntimeError("checkpoint completion metadata is missing")
     extra = checkpoint.get("extra_state")
@@ -107,6 +107,7 @@ def require_complete_checkpoint(
             raise RuntimeError(f"checkpoint provenance is missing {key}")
     expected_eligibility = {
         "headline": (False, True, True),
+        "screen": (False, True, False),
         "diagnostic": (True, False, False),
     }[eligibility_class]
     actual_eligibility = (
@@ -190,6 +191,7 @@ def verify_run_completion_artifact(
         raise RuntimeError("run completion artifact optimizer-step mismatch")
     expected_record_eligibility = {
         "headline": (False, True, True),
+        "screen": (False, True, False),
         "diagnostic": (True, False, False),
     }[eligibility_class]
     actual_record_eligibility = (
