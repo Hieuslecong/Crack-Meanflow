@@ -118,13 +118,15 @@ def main():
             if a.per_image_out: per_image_payload.append({'inference_noise_seed':s,'rows':row.pop('per_image')});
             rows.append(row)
         out=_summary(rows,CORE_KEYS);out.update({'ablation':'A1'})
-    elif bb in {'sit_imf_mask','hybrid_imf_mask'}:
+    elif bb in {'sit_shared_mask','sit_imf_mask','hybrid_imf_mask'}:
         base,_=build_model_and_rasterizer(cfg,device);_ema(base,ck);model=ForwardCounter(base);rows=[]
         for s in seeds:
             before=model.forward_calls;row=evaluate_test_with_frozen_threshold(model,ld,device,crack_meanflow_sampler,th,1,s,1.0,collect_per_image=bool(a.per_image_out));forward_counts.append(model.forward_calls-before);
             if a.per_image_out: per_image_payload.append({'inference_noise_seed':s,'rows':row.pop('per_image')});
             rows.append(row)
-        out=_summary(rows,CORE_KEYS);out.update({'ablation':'A2' if bb=='sit_imf_mask' else 'A2B_CAPACITY_MATCHED'})
+        out=_summary(rows,CORE_KEYS)
+        if bb=='sit_shared_mask': out.update({'method':'CrackMeanFlow_SiT_V1','sit_variant':cfg.get('sit_variant'),'flow_objective':cfg.get('loss',{}).get('mode')})
+        else: out.update({'ablation':'A2' if bb=='sit_imf_mask' else 'A2B_CAPACITY_MATCHED'})
     elif bb=='geocrack_imf':
         base,rast=build_model_and_rasterizer(cfg,device);_ema(base,ck);model=ForwardCounter(base);rows=[]
         for s in seeds:
