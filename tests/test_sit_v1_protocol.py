@@ -150,3 +150,12 @@ def test_sit_v1_optimizer_recipe_is_locked():
         assert tr['ema_decay']==0.9999
         assert tr['lr_schedule']=='constant'
         assert tr['warmup_epochs']==0
+
+
+def test_scientific_eligibility_helper_distinguishes_screen_headline():
+    from crackmeanflow.common.training_protocol import scientific_eligibility_class_from_checkpoint
+    assert scientific_eligibility_class_from_checkpoint({'extra_state':{'run_class':'screen'}})=='screen'
+    assert scientific_eligibility_class_from_checkpoint({'extra_state':{'run_class':'headline'}})=='headline'
+    try:scientific_eligibility_class_from_checkpoint({'extra_state':{'run_class':'diagnostic'}})
+    except RuntimeError as exc:assert 'not a scientific screen/headline' in str(exc)
+    else:raise AssertionError('diagnostic checkpoint must require explicit diagnostic path')
