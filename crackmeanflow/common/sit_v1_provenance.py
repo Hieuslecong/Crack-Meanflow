@@ -5,7 +5,7 @@ from pathlib import Path
 PROTOCOL_ID='CRACKMEANFLOW_SIT_V1'
 VARIANTS={'S0':'mf','S1':'imf'}
 LOCKED_MODEL={'img_size':256,'patch':8,'dim':384,'depth':10,'heads':6,'mlp_ratio':4.0}
-LOCKED_TRAIN={'epochs':200,'research_total_steps':21000,'milestone_steps':[4125,8250,12375,16500,21000],'batch_size':2,'grad_accum_steps':4,'drop_incomplete_accumulation':True,'lr':7.5e-5,'weight_decay':0.0,'warmup_epochs':10,'ema_decay':0.999,'max_grad_norm':1.0,'augment':True,'photometric_augment':True,'resize_policy':'stretch_square','mask_resize_mode':'nearest','mask_binarization':'auto_binary_safe','drop_last':True,'deterministic':True,'deterministic_warn_only':False,'num_workers':0}
+LOCKED_TRAIN={'epochs':200,'research_total_steps':21000,'milestone_steps':[4125,8250,12375,16500,21000],'batch_size':2,'grad_accum_steps':4,'drop_incomplete_accumulation':True,'lr':1e-4,'weight_decay':0.0,'adam_beta1':0.9,'adam_beta2':0.95,'lr_schedule':'constant','warmup_epochs':0,'ema_decay':0.9999,'max_grad_norm':1.0,'augment':True,'photometric_augment':True,'resize_policy':'stretch_square','mask_resize_mode':'nearest','mask_binarization':'auto_binary_safe','drop_last':True,'deterministic':True,'deterministic_warn_only':False,'num_workers':0}
 ALLOWED_TRAINING_SEEDS={0,1,2}
 LOCKED_EVAL={'num_steps':1,'eval_seeds':[0,1,2,3,4],'checkpoint_selection_seeds':[0,1,2],'checkpoint_use_final_threshold_grid':True,'batch_size':2,'checkpoint_validation_interval_epochs':5}
 LOCKED_FINAL_THRESHOLD_GRID={'start':-2.0,'stop':2.0,'step':0.05}
