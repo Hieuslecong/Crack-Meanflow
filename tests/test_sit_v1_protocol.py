@@ -122,3 +122,10 @@ def test_mf_does_not_train_auxiliary_v_head_but_imf_does():
         grad_presence[mode]=model.v_head.weight.grad is not None and bool(model.v_head.weight.grad.abs().sum()>0)
     assert grad_presence['mf'] is False
     assert grad_presence['imf'] is True
+
+
+def test_shared_sit_uses_fixed_position_embedding_and_direct_velocity_heads():
+    model=SharedCrackSiT(img_size=32,patch=8,dim=32,depth=2,heads=4)
+    assert model.pos.requires_grad is False
+    assert hasattr(model,'u_head') and hasattr(model,'v_head')
+    assert not hasattr(model,'clean_u_head')
