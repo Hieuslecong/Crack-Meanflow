@@ -129,3 +129,12 @@ def test_shared_sit_uses_fixed_position_embedding_and_direct_velocity_heads():
     assert model.pos.requires_grad is False
     assert hasattr(model,'u_head') and hasattr(model,'v_head')
     assert not hasattr(model,'clean_u_head')
+
+
+def test_sit_v1_screen_target_firewall():
+    from scripts.evaluate_journal import _validate_sit_v1_target_access
+    _validate_sit_v1_target_access('CRACKMEANFLOW_SIT_V1','screen','GAPS384')
+    _validate_sit_v1_target_access('CRACKMEANFLOW_SIT_V1','screen','OmniCrack30k_repartitioned_v013_holdout')
+    try:_validate_sit_v1_target_access('CRACKMEANFLOW_SIT_V1','screen','FINAL_EXTERNAL')
+    except RuntimeError as exc:assert 'target firewall' in str(exc)
+    else:raise AssertionError('screen-stage final external access must fail closed')
