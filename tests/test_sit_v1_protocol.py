@@ -76,3 +76,24 @@ def test_screen_checkpoint_contract_is_research_valid_not_headline():
     }
     status=require_complete_checkpoint(ck,eligibility_class='screen',exact_budget=True)
     assert status['eligibility_class']=='screen'
+
+
+def test_sit_v1_rejects_eval_protocol_drift():
+    cfg=copy.deepcopy(_configs()['S1']);cfg['eval']['checkpoint_selection_seeds']=[0]
+    try:validate_sit_v1_config(cfg,'S1')
+    except ValueError as exc:assert 'eval.checkpoint_selection_seeds' in str(exc)
+    else:raise AssertionError('evaluation protocol drift must fail closed')
+
+def test_sit_v1_rejects_training_recipe_drift():
+    cfg=copy.deepcopy(_configs()['S0']);cfg['train']['augment']=False
+    try:validate_sit_v1_config(cfg,'S0')
+    except ValueError as exc:assert 'train.augment' in str(exc)
+    else:raise AssertionError('training recipe drift must fail closed')
+
+def test_sit_v1_allows_only_preregistered_confirmation_seeds():
+    cfg=copy.deepcopy(_configs()['S1']);cfg['train']['seed']=2
+    assert validate_sit_v1_config(cfg,'S1')['status']=='PASS'
+    cfg['train']['seed']=3
+    try:validate_sit_v1_config(cfg,'S1')
+    except ValueError as exc:assert 'seed' in str(exc)
+    else:raise AssertionError('unregistered training seed must fail closed')
