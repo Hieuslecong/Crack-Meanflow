@@ -1,5 +1,6 @@
 from __future__ import annotations
-import argparse,json,torch,yaml
+import argparse,json,os,sys,torch,yaml
+sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from crackmeanflow.factory import build_training_components
 
 def main():
