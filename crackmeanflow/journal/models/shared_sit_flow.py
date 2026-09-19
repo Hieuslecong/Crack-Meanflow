@@ -10,6 +10,24 @@ def _b(v: torch.Tensor) -> torch.Tensor:
     return v.reshape(-1, 1, 1, 1)
 
 
+def _sincos_1d(dim: int, positions: torch.Tensor) -> torch.Tensor:
+    if dim % 2:
+        raise ValueError("1D sin-cos embedding dimension must be even")
+    omega = torch.arange(dim // 2, dtype=torch.float64)
+    omega = 1.0 / (10000.0 ** (omega / (dim / 2.0)))
+    phase = positions.reshape(-1).double()[:, None] * omega[None, :]
+    return torch.cat([torch.sin(phase), torch.cos(phase)], dim=1).float()
+
+
+def _fixed_2d_sincos(dim: int, grid: int) -> torch.Tensor:
+    if dim % 4:
+        raise ValueError("2D sin-cos embedding dimension must be divisible by 4")
+    yy, xx = torch.meshgrid(torch.arange(grid), torch.arange(grid), indexing="ij")
+    emb_y = _sincos_1d(dim // 2, yy.reshape(-1))
+    emb_x = _sincos_1d(dim // 2, xx.reshape(-1))
+    return torch.cat([emb_y, emb_x], dim=1).unsqueeze(0)
+
+
 class SharedCrackSiT(nn.Module):
     """Direct-mask SiT backbone shared exactly by MF and iMF arms.
 
@@ -44,8 +62,7 @@ class SharedCrackSiT(nn.Module):
 
         self.state_embed = nn.Conv2d(1, dim, patch, stride=patch)
         self.image_embed = nn.Conv2d(3, dim, patch, stride=patch)
-        self.pos = nn.Parameter(torch.zeros(1, n_tokens, dim))
-        nn.init.trunc_normal_(self.pos, std=0.02)
+        self.pos = nn.Parameter(_fixed_2d_sincos(dim, self.grid), requires_grad=False)
         self.rt = RTEmbedder(dim)
         self.blocks = nn.ModuleList([Block(dim, heads, mlp_ratio) for _ in range(depth)])
         self.norm = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
@@ -58,6 +75,30 @@ class SharedCrackSiT(nn.Module):
         # DiT/SiT-style final layers; v is auxiliary for iMF and unused at inference.
         self.u_head = nn.Linear(dim, patch * patch)
         self.v_head = nn.Linear(dim, patch * patch)
+        self._initialize_weights()
+
+    def _initialize_weights(self):
+        # Match the core DiT/SiT initialization policy where applicable.
+        def basic_init(module):
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+        self.apply(basic_init)
+        for conv in (self.state_embed, self.image_embed):
+            nn.init.xavier_uniform_(conv.weight.view(conv.weight.shape[0], -1))
+            if conv.bias is not None:
+                nn.init.zeros_(conv.bias)
+        for layer in self.rt.mlp:
+            if isinstance(layer, nn.Linear):
+                nn.init.normal_(layer.weight, std=0.02)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+        for block in self.blocks:
+            nn.init.zeros_(block.ada[-1].weight)
+            nn.init.zeros_(block.ada[-1].bias)
+        nn.init.zeros_(self.ada_out[-1].weight)
+        nn.init.zeros_(self.ada_out[-1].bias)
         for head in (self.u_head, self.v_head):
             nn.init.zeros_(head.weight)
             nn.init.zeros_(head.bias)
