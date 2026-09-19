@@ -21,10 +21,11 @@ from crackmeanflow.factory import build_model_and_rasterizer
 CORE_KEYS=['f1','iou','precision','recall','f1_macro_image','iou_macro_image','precision_macro_image','recall_macro_image','f1_macro_positive_image','iou_macro_positive_image','cldice','boundary_f1','gt_foreground_ratio','pred_foreground_ratio','empty_gt_false_positive_rate']
 
 def _scientific_validity(eligibility_class,config_match,code_match,strict_locks,resume_tainted):
-    if eligibility_class != 'headline': return 'DIAGNOSTIC_ARTIFACT'
+    if eligibility_class == 'diagnostic': return 'DIAGNOSTIC_ARTIFACT'
     if not config_match: return 'DIAGNOSTIC_CONFIG_MISMATCH'
     if resume_tainted: return 'TAINTED_RESUME_CONFIG_CHANGE'
     if not code_match or not strict_locks: return 'DIAGNOSTIC_UNLOCKED_PROTOCOL'
+    if eligibility_class == 'screen': return 'VALID_SCREEN_PROTOCOL'
     return 'VALID_HEADLINE_PROTOCOL'
 
 def _ema(model,ck):
