@@ -97,3 +97,28 @@ def test_sit_v1_allows_only_preregistered_confirmation_seeds():
     try:validate_sit_v1_config(cfg,'S1')
     except ValueError as exc:assert 'seed' in str(exc)
     else:raise AssertionError('unregistered training seed must fail closed')
+
+
+def test_imf_v_head_is_auxiliary_and_not_used_by_sampler():
+    from crackmeanflow.sampler import crack_meanflow_sampler
+    model=SharedCrackSiT(img_size=32,patch=8,dim=32,depth=2,heads=4)
+    image=torch.randn(1,3,32,32);z=torch.randn(1,1,32,32)
+    calls={'flow':0}
+    original=model.flow_outputs
+    def wrapped(*args,**kwargs):
+        calls['flow']+=1
+        return original(*args,**kwargs)
+    model.flow_outputs=wrapped
+    out,_=crack_meanflow_sampler(model,z,image,num_steps=1,cfg_scale=1.0,clamp=False)
+    assert out.shape==z.shape
+    assert calls['flow']==1
+
+def test_mf_does_not_train_auxiliary_v_head_but_imf_does():
+    x0=torch.where(torch.rand(2,1,32,32)>.9,torch.ones(1),-torch.ones(1));image=torch.randn(2,3,32,32)
+    grad_presence={}
+    for mode in ('mf','imf'):
+        torch.manual_seed(7);model=SharedCrackSiT(img_size=32,patch=8,dim=32,depth=2,heads=4)
+        loss,_=MatchedSiTFlowLoss(mode=mode)(model,x0,image,sample_offset=0);loss.backward()
+        grad_presence[mode]=model.clean_v_head.weight.grad is not None and bool(model.clean_v_head.weight.grad.abs().sum()>0)
+    assert grad_presence['mf'] is False
+    assert grad_presence['imf'] is True
