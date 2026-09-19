@@ -62,6 +62,22 @@ def validate_execution_identity(
             )
 
 
+def scientific_eligibility_class_from_checkpoint(checkpoint: Mapping[str, Any]) -> str:
+    """Return the scientific eligibility class recorded by a checkpoint.
+
+    Screen checkpoints are research-valid but not final-paper eligible; headline
+    checkpoints are final-paper eligible. Diagnostic checkpoints are not accepted
+    by this helper because callers must opt into diagnostics explicitly.
+    """
+    extra=(checkpoint or {}).get("extra_state") or {}
+    run_class=str(extra.get("run_class","headline"))
+    if run_class=="screen":
+        return "screen"
+    if run_class=="headline":
+        return "headline"
+    raise RuntimeError(f"checkpoint run_class={run_class!r} is not a scientific screen/headline checkpoint")
+
+
 def require_complete_checkpoint(
     checkpoint: Mapping[str, Any],
     *,
