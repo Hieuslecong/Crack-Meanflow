@@ -53,3 +53,26 @@ def test_mf_and_imf_losses_share_model_and_have_finite_gradients():
         grads=[p.grad for p in model.parameters() if p.grad is not None]
         assert grads and all(torch.isfinite(g).all() for g in grads)
     assert param_counts[0]==param_counts[1]
+
+
+def test_screen_checkpoint_contract_is_research_valid_not_headline():
+    from crackmeanflow.common.training_protocol import require_complete_checkpoint
+    ck={
+        'global_optimizer_step':16500,
+        'best_val_metric':0.5,
+        'best_val_threshold':0.0,
+        'config_hash':'c',
+        'source_tree_sha256':'s',
+        'protocol_bundle_sha256':'p',
+        'extra_state':{
+            'fairness':{'planned_optimizer_steps':16500},
+            'epoch_complete':True,
+            'budget_reached':True,
+            'diagnostic_only':False,
+            'research_metric_valid':True,
+            'eligible_for_paper':False,
+            'run_class':'screen',
+        },
+    }
+    status=require_complete_checkpoint(ck,eligibility_class='screen',exact_budget=True)
+    assert status['eligibility_class']=='screen'
