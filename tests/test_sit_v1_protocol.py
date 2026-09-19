@@ -119,6 +119,6 @@ def test_mf_does_not_train_auxiliary_v_head_but_imf_does():
     for mode in ('mf','imf'):
         torch.manual_seed(7);model=SharedCrackSiT(img_size=32,patch=8,dim=32,depth=2,heads=4)
         loss,_=MatchedSiTFlowLoss(mode=mode)(model,x0,image,sample_offset=0);loss.backward()
-        grad_presence[mode]=model.clean_v_head.weight.grad is not None and bool(model.clean_v_head.weight.grad.abs().sum()>0)
+        grad_presence[mode]=model.v_head.weight.grad is not None and bool(model.v_head.weight.grad.abs().sum()>0)
     assert grad_presence['mf'] is False
     assert grad_presence['imf'] is True
