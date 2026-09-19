@@ -39,6 +39,7 @@ evaluation:
   nfe: 1
   source_threshold_only: true
   development_ood: [GAPS384, OmniCrack30k_repartitioned_v013_holdout]
+  development_ood_metrics_previously_seen_under_option_c: true
   development_ood_role: model_selection_only
   final_external_dataset_access: closed
 anti_bloat:
