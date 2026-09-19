@@ -10,7 +10,6 @@ model:
   depth: 10
   heads: 6
   mlp_ratio: 4.0
-  background_init: -0.95
 train:
   epochs: 200
   research_total_steps: 21000
