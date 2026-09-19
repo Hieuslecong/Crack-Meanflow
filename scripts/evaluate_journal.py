@@ -63,7 +63,11 @@ def main():
     if not a.target_lock and not a.diagnostic_unlocked_target: raise RuntimeError('paper/headline evaluation requires --target-lock; use --diagnostic-unlocked-target only for non-headline diagnostics')
     if not a.threshold_lock and not a.diagnostic_checkpoint_threshold: raise RuntimeError('paper/headline evaluation requires --threshold-lock frozen on source validation; use --diagnostic-checkpoint-threshold only for diagnostics')
     cfg=yaml.safe_load(open(a.config));device=torch.device('cuda' if torch.cuda.is_available() else 'cpu');ck=torch.load(a.ckpt,map_location='cpu',weights_only=False)
-    eligibility_class = "diagnostic" if (a.diagnostic_unlocked_target or a.diagnostic_checkpoint_threshold or a.allow_config_mismatch) else "headline"
+    if a.diagnostic_unlocked_target or a.diagnostic_checkpoint_threshold or a.allow_config_mismatch:
+        eligibility_class="diagnostic"
+    else:
+        saved_run_class=str((ck.get('extra_state') or {}).get('run_class','headline'))
+        eligibility_class='screen' if saved_run_class=='screen' else 'headline'
     selected_checkpoint_status=require_complete_checkpoint(ck,eligibility_class=eligibility_class,exact_budget=False)
     completion_record=verify_run_completion_artifact(a.ckpt,ck,eligibility_class=eligibility_class)
     if int(cfg.get('eval',{}).get('num_steps',1))!=1:raise RuntimeError('headline evaluation requires eval.num_steps=1')
