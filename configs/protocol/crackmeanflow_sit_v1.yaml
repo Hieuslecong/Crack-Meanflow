@@ -27,6 +27,15 @@ architecture_lock:
 variants:
   S0: {backbone: sit_shared_mask, objective: mf}
   S1: {backbone: sit_shared_mask, objective: imf}
+optimizer_lock:
+  optimizer: AdamW
+  learning_rate: 0.0001
+  adam_beta1: 0.9
+  adam_beta2: 0.95
+  weight_decay: 0.0
+  ema_decay: 0.9999
+  lr_schedule: constant
+  warmup_epochs: 0
 fairness_lock:
   effective_batch_size: 8
   shared_rt_sampling: true
