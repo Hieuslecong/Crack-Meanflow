@@ -51,6 +51,10 @@ budget:
   confirmation_training_seeds: [0,1,2]
 evaluation:
   nfe: 1
+  checkpoint_selection: source_CFD_validation_only
+  threshold_selection: source_CFD_validation_only
+  development_ood_may_select_checkpoint: false
+  development_ood_may_select_variant: true
   source_threshold_only: true
   development_ood: [GAPS384, OmniCrack30k_repartitioned_v013_holdout]
   development_ood_metrics_previously_seen_under_option_c: true
