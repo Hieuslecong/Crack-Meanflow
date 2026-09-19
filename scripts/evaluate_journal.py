@@ -9,7 +9,7 @@ from crackmeanflow.common import (
     verify_source_dataset_contract,target_dataset_identity,config_hash,source_tree_hash,protocol_bundle_hash,audit_group_integrity,audit_cross_dataset_image_content_overlap,
     load_and_verify_target_lock,load_and_verify_threshold_lock,source_splits_for_config,file_sha256,
 )
-from crackmeanflow.common.training_protocol import require_complete_checkpoint,verify_run_completion_artifact
+from crackmeanflow.common.training_protocol import require_complete_checkpoint,verify_run_completion_artifact,scientific_eligibility_class_from_checkpoint
 from crackmeanflow.sampler import crack_meanflow_sampler
 from crackmeanflow.sit import build_sit
 from crackmeanflow.adapter import CrackMeanFlowModel
@@ -75,8 +75,7 @@ def main():
     if a.diagnostic_unlocked_target or a.diagnostic_checkpoint_threshold or a.allow_config_mismatch:
         eligibility_class="diagnostic"
     else:
-        saved_run_class=str((ck.get('extra_state') or {}).get('run_class','headline'))
-        eligibility_class='screen' if saved_run_class=='screen' else 'headline'
+        eligibility_class=scientific_eligibility_class_from_checkpoint(ck)
     selected_checkpoint_status=require_complete_checkpoint(ck,eligibility_class=eligibility_class,exact_budget=False)
     completion_record=verify_run_completion_artifact(a.ckpt,ck,eligibility_class=eligibility_class)
     _validate_sit_v1_target_access(cfg.get('protocol_id'),eligibility_class,a.dataset_name)
